@@ -1,8 +1,8 @@
-// src/utils/helpers.ts
-import type { BubbleData } from "../pages/ArenaPage";
+import type { BubbleData, Spike } from "../pages/ArenaPage";
 
-export const getRandom = (min: number, max: number) =>
-  Math.random() * (max - min) + min;
+export function getRandom(min: number, max: number): number {
+  return Math.random() * (max - min) + min;
+}
 
 export const checkCollision = (b1: BubbleData, b2: BubbleData) => {
   const dx = b1.x - b2.x;
@@ -11,34 +11,47 @@ export const checkCollision = (b1: BubbleData, b2: BubbleData) => {
   return distance < b1.radius + b2.radius;
 };
 
-// ✅ Only return true when bubble overlaps an actual thorn spike
-export const checkThornCollision = (
-  b: BubbleData,
-  arenaWidth: number,
-  arenaHeight: number,
-  thornSize: number = 30 // spike size
-): boolean => {
-  // treat spikes as little triangles/rectangles along edges instead of full walls
+// function pointDistance(px: number, py: number, qx: number, qy: number): number {
+//   return Math.sqrt((px - qx) ** 2 + (py - qy) ** 2);
+// }
 
-  // left spikes
-  const leftHit =
-    b.x - b.radius <= thornSize &&
-    b.y % Math.floor(arenaHeight / 20) < thornSize;
+export function checkSpikeCollision(b: BubbleData, thorns: Spike[]): Spike | null {
+  for (const thorn of thorns) {
+    const { x, y, size, side } = thorn;
+    let tipX = x, tipY = y;
 
-  // right spikes
-  const rightHit =
-    b.x + b.radius >= arenaWidth - thornSize &&
-    b.y % Math.floor(arenaHeight / 20) < thornSize;
+    // Compute triangle tip coordinates
+    switch (side) {
+      case "top":
+        tipX += size / 2;
+        tipY += size;   // triangle tip downward
+        break;
+      case "bottom":
+        tipX += size / 2;
+        tipY -= size;   // triangle tip upward
+        break;
+      case "left":
+        tipX += size;   
+        tipY += size / 2; // tip rightward
+        break;
+      case "right":
+        tipX -= size;
+        tipY += size / 2; // tip leftward
+        break;
+    }
 
-  // top spikes
-  const topHit =
-    b.y - b.radius <= thornSize &&
-    b.x % Math.floor(arenaWidth / 20) < thornSize;
+    const dx = b.x - tipX;
+    const dy = b.y - tipY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
 
-  // bottom spikes
-  const bottomHit =
-    b.y + b.radius >= arenaHeight - thornSize &&
-    b.x % Math.floor(arenaWidth / 20) < thornSize;
+    // Only bounce if bubble actually "touches" the tip
+    if (dist <= b.radius + 2) { // +2 for tolerance
+      return thorn;
+    }
+  }
+  return null;
+}
 
-  return leftHit || rightHit || topHit || bottomHit;
-};
+
+
+

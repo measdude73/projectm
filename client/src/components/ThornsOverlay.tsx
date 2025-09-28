@@ -1,82 +1,105 @@
-// src/components/ThornsOverlay.tsx
-import React from "react";
+// import React, { useEffect } from "react";
+// import type { Thorn } from "../pages/ArenaPage";
 
-interface ThornsOverlayProps {
-  arenaWidth: number;
-  arenaHeight: number;
-  thornCount: number;
-}
+// interface ThornsOverlayProps {
+//   arenaWidth: number;
+//   arenaHeight: number;
+//   thornCount: number;
+//   setThorns: React.Dispatch<React.SetStateAction<Thorn[]>>;
+//   thorns: Thorn[]; // <- add this!
+// }
 
-const ThornsOverlay: React.FC<ThornsOverlayProps> = ({ arenaWidth, arenaHeight, thornCount }) => {
-  const sides = ["top", "right", "bottom", "left"];
+// export const ThornsOverlay: React.FC<ThornsOverlayProps> = ({
+//   arenaWidth,
+//   arenaHeight,
+//   thornCount,
+//   setThorns,
+//   thorns,
+// }) => {
+//   useEffect(() => {
+//     if (arenaWidth === 0 || arenaHeight === 0) return;
 
-  // Generate thorn positions once and store them (fixed placement)
-  const thornPositions = React.useMemo(() => {
-    const thorns = [];
-    for (let i = 0; i < thornCount; i++) {
-      const side = sides[Math.floor(Math.random() * sides.length)];
-      const size = 20 + Math.random() * 10; // Variation in size
-      
-      let style: React.CSSProperties = {};
+//     const thorns: Thorn[] = [];
+//     for (let i = 0; i < thornCount; i++) {
+//       const side = ["top", "bottom", "left", "right"][
+//         Math.floor(Math.random() * 4)
+//       ];
 
-      if (side === "top") {
-        style = {
-          position: "absolute",
-          top: 0,
-          left: Math.random() * (arenaWidth - size),
-          width: 0,
-          height: 0,
-          borderLeft: `${size / 2}px solid transparent`,
-          borderRight: `${size / 2}px solid transparent`,
-          borderTop: `${size}px solid black`,
-        };
-      } else if (side === "bottom") {
-        style = {
-          position: "absolute",
-          bottom: 0,
-          left: Math.random() * (arenaWidth - size),
-          width: 0,
-          height: 0,
-          borderLeft: `${size / 2}px solid transparent`,
-          borderRight: `${size / 2}px solid transparent`,
-          borderBottom: `${size}px solid black`,
-        };
-      } else if (side === "left") {
-        style = {
-          position: "absolute",
-          left: 0,
-          top: Math.random() * (arenaHeight - size),
-          width: 0,
-          height: 0,
-          borderTop: `${size / 2}px solid transparent`,
-          borderBottom: `${size / 2}px solid transparent`,
-          borderLeft: `${size}px solid black`,
-        };
-      } else if (side === "right") {
-        style = {
-          position: "absolute",
-          right: 0,
-          top: Math.random() * (arenaHeight - size),
-          width: 0,
-          height: 0,
-          borderTop: `${size / 2}px solid transparent`,
-          borderBottom: `${size / 2}px solid transparent`,
-          borderRight: `${size}px solid black`,
-        };
-      }
+//       const size = 30; // spike size
+//       let x = 0;
+//       let y = 0;
 
-      thorns.push(
-        <div key={i} style={style} />
-      );
-    }
-    return thorns;
-  }, [arenaWidth, arenaHeight, thornCount]);
+//       if (side === "top") {
+//         x = Math.random() * (arenaWidth - size);
+//         y = 0;
+//       } else if (side === "bottom") {
+//         x = Math.random() * (arenaWidth - size);
+//         y = arenaHeight - size;
+//       } else if (side === "left") {
+//         x = 0;
+//         y = Math.random() * (arenaHeight - size);
+//       } else if (side === "right") {
+//         x = arenaWidth - size;
+//         y = Math.random() * (arenaHeight - size);
+//       }
 
-  return (
-    <div className="absolute top-0 left-0 w-full h-full pointer-events-none">
-      {thornPositions}
-    </div>
-  );
-};
+//       thorns.push({ side, x, y, size });
+//     }
 
-export default ThornsOverlay;
+//     setThorns(thorns);
+//   }, [arenaWidth, arenaHeight, thornCount, setThorns]);
+
+// // ThornsOverlay.tsx (only update the rendering return block)
+// return (
+//   <div className="absolute inset-0 pointer-events-none">
+//     {thorns.map((thorn, i) => {
+//       let points = "";
+//       let style: React.CSSProperties = {
+//         position: "absolute",
+//         pointerEvents: "none",
+//       };
+//       const w = thorn.size;
+//       const h = thorn.size;
+
+//       switch (thorn.side) {
+//         case "top":
+//           style.left = thorn.x;
+//           style.top = thorn.y;
+//           // Triangle pointing down (base at top, tip inward)
+//           points = `0,0 ${w},0 ${w/2},${h}`;
+//           break;
+//         case "bottom":
+//           style.left = thorn.x;
+//           style.top = thorn.y;
+//           // Triangle pointing up (base at bottom, tip inward)
+//           points = `0,${h} ${w},${h} ${w/2},0`;
+//           break;
+//         case "left":
+//           style.left = thorn.x;
+//           style.top = thorn.y;
+//           // Triangle pointing right (base at left, tip inward)
+//           points = `0,0 0,${h} ${w},${h/2}`;
+//           break;
+//         case "right":
+//           style.left = thorn.x;
+//           style.top = thorn.y;
+//           // Triangle pointing left (base at right, tip inward)
+//           points = `${w},0 ${w},${h} 0,${h/2}`;
+//           break;
+//       }
+//       return (
+//         <svg
+//           key={`thorn-${i}`}
+//           width={w}
+//           height={h}
+//           style={style}
+//         >
+//           <polygon points={points} fill="black" />
+//         </svg>
+//       );
+//     })}
+//   </div>
+// );
+
+
+// };
