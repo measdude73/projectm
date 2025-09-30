@@ -122,6 +122,8 @@
   border-left: 3px solid rgba(61, 59, 59, 0.553);
   padding: 1rem;
   overflow-y: auto;
+  overflow-x: hidden;
+   /* Add this line */
 }
 .leaderboard-title {
   font-size: 1.2rem;
@@ -132,27 +134,49 @@
   list-style: none;
   padding: 0;
   margin: 0;
+  overflow-x: hidden; /* Add this line */
 }
+
 .leaderboard-item {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 0.75rem;
   font-size: 0.9rem;
 }
+
 .leaderboard-img {
   width: 30px;
   height: 30px;
   border-radius: 50%;
+  /* Use margin-right to separate image and name */
   margin-right: 0.5rem;
+  flex-shrink: 0; /* prevent shrinking */
 }
+
 .leaderboard-name {
+  color: #ddd;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 130px; /* or adjust width based on your layout */
+  display: block;
+  min-width: 0; /* needed for flexbox truncation */
+}
+/* .leaderboard-name {
+  flex: 1; 
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-left: 0;
+}
+/* .leaderboard-name {
   flex: 1;
   margin-left: 0.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
+} */ 
 
 /* Winner modal */
 .winner-modal {
