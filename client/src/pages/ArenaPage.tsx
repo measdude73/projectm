@@ -38,10 +38,16 @@ const ARENA_TYPES = {
   BOSS: "boss",
 } as const;
 
-const SUPER_BUBBLE_HEALTH = 20;
+const SUPER_BUBBLE_HEALTH = 100;
 
 let nextBubbleId = 1;
 let nextProjectileId = 1;
+
+type Projectile = { id: number; x: number; y: number; vx: number; vy: number; type: keyof typeof SUPER_BUBBLE_TYPES };
+
+// Visual effect types
+type MuzzleFlash = { id: number; x: number; y: number; createdAt: number };
+type HitEffect = { id: number; x: number; y: number; createdAt: number };
 
 const ArenaPage: React.FC = () => {
   const speed = 3;
@@ -55,9 +61,7 @@ const ArenaPage: React.FC = () => {
   const [bubbles, setBubbles] = useState<BubbleData[]>([]);
   const [superBubble, setSuperBubble] = useState<BubbleData | null>(null);
   const [superBubbleType, setSuperBubbleType] = useState<keyof typeof SUPER_BUBBLE_TYPES>("flame");
-  const [projectiles, setProjectiles] = useState<
-    Array<{ id: number; x: number; y: number; vx: number; vy: number; type: keyof typeof SUPER_BUBBLE_TYPES }>
-  >([]);
+  const [projectiles, setProjectiles] = useState<Projectile[]>([]);
   const [isRunning, setIsRunning] = useState(false);
   const [winner, setWinner] = useState<BubbleData | null>(null);
 
@@ -75,20 +79,10 @@ const ArenaPage: React.FC = () => {
   const [speedMultiplier, setSpeedMultiplier] = useState(2.5);
   const [controlsOpen, setControlsOpen] = useState(false);
 
-  // ---- NEW: superpower control states ----
-  const [superpowerEnabled, setSuperpowerEnabled] = useState(false); // master toggle
-  const [selectedPowers, setSelectedPowers] = useState<{ [k in keyof typeof SUPER_BUBBLE_TYPES]?: boolean }>({
-    flame: true,
-    arrow: false,
-    bullet: false,
-  });
-  const [firingMode, setFiringMode] = useState<"auto" | "manual">("manual");
-  const autoFireRef = useRef<number | null>(null);
-
   // Refs used inside boss loop to avoid stale closures
   const bubblesRef = useRef<BubbleData[]>([]);
   const superRef = useRef<BubbleData | null>(null);
-  const projectilesRef = useRef(projectiles);
+  const projectilesRef = useRef<Projectile[]>(projectiles);
   const arenaTypeRef = useRef<string | null>(arenaType);
 
   useEffect(() => {
@@ -120,18 +114,22 @@ const ArenaPage: React.FC = () => {
     return dx * dx + dy * dy;
   };
 
+  // Make radii allow very small dots for huge counts
   const getRadiusForCount = (count: number) => {
-    if (count <= 10) return 50;
-    if (count <= 50) return 45;
-    if (count <= 100) return 40;
-    if (count <= 500) return 35;
-    if (count <= 1000) return 30;
-    if (count <= 5000) return 25;
-    if (count <= 10000) return 20;
-    if (count <= 50000) return 15;
-    if (count <= 100000) return 10;
-    return 5;
+    if (count <= 10) return 45;
+    if (count <= 50) return 40;
+    if (count <= 100) return 22.5;
+    if (count <= 500) return 20;
+    if (count <= 1000) return 17.5;
+    if (count <= 5000) return 15;
+    if (count <= 10000) return 3;
+    if (count <= 50000) return 2;
+    if (count <= 100000) return 1.5;
+    return 1; // very small dots when extremely many bubbles
   };
+
+  // threshold radius below which we render a tiny dot (no image) and above which we render Bubble (image)
+  const IMAGE_SHOW_RADIUS = 17;
 
   // Separation & bounce helpers (used in boss logic)
   const separatePair = (a: BubbleData, b: BubbleData) => {
@@ -246,24 +244,9 @@ const ArenaPage: React.FC = () => {
           const targetRadius = getRadiusForCount(images.length);
           const newBubbles: BubbleData[] = [];
           for (const img of images) {
-            let tries = 0;
-            let x = 0;
-            let y = 0;
-            let valid = false;
-            while (!valid && tries < 100) {
-              tries++;
-              x = getRandom(targetRadius, arena.width - targetRadius);
-              y = getRandom(targetRadius, arena.height - targetRadius);
-              valid = true;
-              for (const b of [...newBubbles]) {
-                const dx = x - b.x;
-                const dy = y - b.y;
-                if (Math.sqrt(dx * dx + dy * dy) < targetRadius * 2) {
-                  valid = false;
-                  break;
-                }
-              }
-            }
+            // keep random positions (allow overlaps) — do not attempt to grid-pack or force spacing
+            const x = getRandom(targetRadius, arena.width - targetRadius);
+            const y = getRandom(targetRadius, arena.height - targetRadius);
             newBubbles.push({
               x,
               y,
@@ -275,6 +258,7 @@ const ArenaPage: React.FC = () => {
               id: nextBubbleId++,
             });
           }
+          // keep existing logic of radius recalculation if combined with previous bubbles
           setBubbles((prev) => {
             const combined = [...prev, ...newBubbles];
             const r = getRadiusForCount(combined.length);
@@ -378,15 +362,53 @@ const ArenaPage: React.FC = () => {
     }
   }, [isRunning, arenaType]);
 
-  // -------------------- main loop (normal and boss separated) --------------------
+  // -------------------- SPATIAL GRID helpers (used in NORMAL loop to reduce O(n^2)) --------------------
+  const buildSpatialGrid = (items: BubbleData[], cellSize: number) => {
+    const grid = new Map<string, number[]>();
+    const key = (cx: number, cy: number) => `${cx}|${cy}`;
+    for (let i = 0; i < items.length; i++) {
+      const b = items[i];
+      const cx = Math.floor(b.x / cellSize);
+      const cy = Math.floor(b.y / cellSize);
+      const k = key(cx, cy);
+      const arr = grid.get(k) ?? [];
+      arr.push(i);
+      grid.set(k, arr);
+    }
+    return { grid, key };
+  };
+
+  const getNearbyIndices = (item: BubbleData, gridMap: Map<string, number[]>, keyFn: (a: number, b: number) => string, cellSize: number) => {
+    const cx = Math.floor(item.x / cellSize);
+    const cy = Math.floor(item.y / cellSize);
+    const out: number[] = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const k = keyFn(cx + dx, cy + dy);
+        const arr = gridMap.get(k);
+        if (arr) out.push(...arr);
+      }
+    }
+    return out;
+  };
+
+  // -------------------- main loop (normal optimized with spatial grid & start-grace) --------------------
+  // startGraceRef: only separate on collisions for a short time on start; don't apply damage until grace over
+  const startGraceRef = useRef<boolean>(false);
+
   useEffect(() => {
     if (!isRunning || !arenaType) return;
 
     // NORMAL arena loop
     if (arenaType === ARENA_TYPES.NORMAL) {
+      // set short start-grace to prevent immediate burst
+      startGraceRef.current = true;
+      const graceT = window.setTimeout(() => (startGraceRef.current = false), 350);
+
       const normalInterval = window.setInterval(() => {
         const arena = getArenaDimensions();
         setBubbles((prev) => {
+          // move
           const moved = prev.map((b) => {
             let nx = b.x + b.vx * speedMultiplier;
             let ny = b.y + b.vy * speedMultiplier;
@@ -411,16 +433,38 @@ const ArenaPage: React.FC = () => {
             return { ...b, x: nx, y: ny, vx: nvx, vy: nvy };
           });
 
-          // normal-normal collisions
+          // spatial grid to reduce checks (keeps behavior same but faster)
+          const maxRadius = moved.reduce((m, it) => Math.max(m, it.radius), 1);
+          const cellSize = Math.max(8, maxRadius * 2 + 2);
+          const { grid, key } = buildSpatialGrid(moved, cellSize);
+
+          // compute alive count for dynamic damage rules
+          const aliveCountEstimate = moved.length;
+
+          // normal-normal collisions using neighbor lists
           for (let i = 0; i < moved.length; i++) {
-            for (let j = i + 1; j < moved.length; j++) {
-              const a = moved[i];
+            const a = moved[i];
+            const nearby = getNearbyIndices(a, grid, (cx, cy) => `${cx}|${cy}`, cellSize);
+            for (const j of nearby) {
+              if (j <= i) continue;
               const c = moved[j];
               if (checkCollision(a, c)) {
                 separatePair(a, c);
                 bouncePair(a, c);
-                moved[i].health = Math.max(moved[i].health - 8, 0);
-                moved[j].health = Math.max(moved[j].health - 8, 0);
+
+                // only apply damage after startup grace
+                if (!startGraceRef.current) {
+                  // dynamic damage based on total active count:
+                  // - if many bubbles (>500): very small damage (2 HP OR 2% of health)
+                  // - else: 5 HP per collision
+                  const damageForA =
+                    aliveCountEstimate > 1500 ? Math.max(2, Math.floor(moved[i].health * 0.025)) : 1;
+                  const damageForC =
+                    aliveCountEstimate > 1500 ? Math.max(2, Math.floor(moved[j].health * 0.025)) : 1;
+
+                  moved[i].health = Math.max(moved[i].health - damageForA, 0);
+                  moved[j].health = Math.max(moved[j].health - damageForC, 0);
+                }
               }
             }
           }
@@ -450,23 +494,32 @@ const ArenaPage: React.FC = () => {
             }
           }
 
+          // remove dead
           const alive = moved.filter((b) => b.health > 0);
 
-          if (alive.length === 1) {
-            // single normal winner (normal arena)
-            setWinnersList(null);
-            setWinnersImages(null);
-            setWinner(alive[0]);
+          // update radius based on alive count (resizing logic preserved)
+          const newRadius = getRadiusForCount(alive.length);
+          const adjusted = alive.map((b) => ({ ...b, radius: newRadius }));
+
+          // winner stop
+          if (adjusted.length <= 1) {
             setIsRunning(false);
+            if (adjusted.length === 1) {
+              setWinner(adjusted[0]);
+            }
           }
 
-          return alive;
+          return adjusted;
         });
       }, 50);
-      return () => clearInterval(normalInterval);
+      return () => {
+        clearInterval(normalInterval);
+        clearTimeout(graceT);
+        startGraceRef.current = false;
+      };
     }
 
-    // BOSS arena loop
+    // BOSS arena loop (unchanged behavior)
     if (arenaType === ARENA_TYPES.BOSS) {
       const bossInterval = window.setInterval(() => {
         // Work on local copies, then commit once per tick
@@ -608,6 +661,15 @@ const ArenaPage: React.FC = () => {
               const power = SUPER_BUBBLE_TYPES[p.type];
               n.health = Math.max(0, n.health - power.damage);
               hit = true;
+
+              // add a small hit effect (visual feedback)
+              const hitId = Date.now() + Math.floor(Math.random() * 10000);
+              setHitEffects((h) => [...h, { id: hitId, x: n.x, y: n.y, createdAt: Date.now() }]);
+              // remove after short time
+              setTimeout(() => {
+                setHitEffects((h) => h.filter((he) => he.id !== hitId));
+              }, 300);
+
               break;
             }
           }
@@ -665,8 +727,8 @@ const ArenaPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning, arenaType, spikeEnabled, spikeCount, spikeSize, speedMultiplier]);
 
-  // -------------------- Superpower firing helpers --------------------
-  // 8 compass directions (normalized unit vectors)
+  // -------------------- Superpower firing controls --------------------
+  // 8 compass directions (normalized)
   const COMPASS = [
     { name: "E", vx: 1, vy: 0 },
     { name: "W", vx: -1, vy: 0 },
@@ -678,7 +740,33 @@ const ArenaPage: React.FC = () => {
     { name: "SW", vx: -0.70710678, vy: 0.70710678 },
   ];
 
-  // picks a random available power key (if multiple selected), returns a key from SUPER_BUBBLE_TYPES
+  const [superpowerEnabled, setSuperpowerEnabled] = useState(false);
+  const [selectedPowers, setSelectedPowers] = useState<{ [k in keyof typeof SUPER_BUBBLE_TYPES]?: boolean }>({
+    flame: true,
+    arrow: false,
+    bullet: false,
+  });
+  const [firingMode, setFiringMode] = useState<"auto" | "manual">("manual");
+  const autoFireRef = useRef<number | null>(null);
+
+  // projectile speed slider (per tick)
+  const [projectileSpeedPerTick, setProjectileSpeedPerTick] = useState<number>(6);
+
+  // muzzle flashes and hit effects
+  const [muzzleFlashes, setMuzzleFlashes] = useState<MuzzleFlash[]>([]);
+  const [hitEffects, setHitEffects] = useState<HitEffect[]>([]);
+
+  useEffect(() => {
+    // cleanup auto fire when stopping or leaving arena
+    return () => {
+      if (autoFireRef.current) {
+        window.clearInterval(autoFireRef.current);
+        autoFireRef.current = null;
+      }
+    };
+  }, []);
+
+  // pick random selected power
   const pickRandomSelectedPower = (): keyof typeof SUPER_BUBBLE_TYPES => {
     const keys = Object.keys(SUPER_BUBBLE_TYPES) as (keyof typeof SUPER_BUBBLE_TYPES)[];
     const available = keys.filter((k) => selectedPowers[k]);
@@ -686,16 +774,11 @@ const ArenaPage: React.FC = () => {
     return available[Math.floor(Math.random() * available.length)];
   };
 
-  // pick random compass direction object
   const pickRandomDirection = () => {
     return COMPASS[Math.floor(Math.random() * COMPASS.length)];
   };
 
-  // compute projectile velocity per tick. projectiles in boss loop move by p.vx each tick (no multiplier)
-  const projectileSpeedPerTick = 6; // tune this for visual speed
-
   // -------------------- Shoot (manual or auto) --------------------
-  // IMPORTANT: spawn from superbubble's current position (use superRef to avoid stale closures)
   const handleShoot = (forcedDirection?: { vx: number; vy: number }) => {
     if (!superRef.current || arenaType !== ARENA_TYPES.BOSS || !isRunning || !superpowerEnabled) return;
     const sb = superRef.current;
@@ -705,27 +788,33 @@ const ArenaPage: React.FC = () => {
     const vy = dir.vy * projectileSpeedPerTick;
 
     nextProjectileId++;
-    // spawn exactly at superbubble center
-    setProjectiles((p) => [...p, { id: nextProjectileId, x: sb.x, y: sb.y, vx, vy, type: powerKey }]);
+    const id = nextProjectileId;
+
+    // spawn projectile exactly at superbubble center
+    setProjectiles((p) => [...p, { id, x: sb.x, y: sb.y, vx, vy, type: powerKey }]);
+
+    // muzzle flash at superbubble center
+    const mfId = Date.now() + Math.floor(Math.random() * 10000);
+    setMuzzleFlashes((m) => [...m, { id: mfId, x: sb.x, y: sb.y, createdAt: Date.now() }]);
+    setTimeout(() => {
+      setMuzzleFlashes((m) => m.filter((mm) => mm.id !== mfId));
+    }, 220);
   };
 
   // -------------------- Auto-fire effect (fires every 3s when enabled) --------------------
   useEffect(() => {
-    // cleanup any previous interval
+    // cleanup previous auto interval
     if (autoFireRef.current) {
       window.clearInterval(autoFireRef.current);
       autoFireRef.current = null;
     }
 
     if (arenaType === ARENA_TYPES.BOSS && isRunning && superpowerEnabled && firingMode === "auto") {
-      // Start interval
       const id = window.setInterval(() => {
-        // choose random direction and shoot (use superRef)
         const dir = pickRandomDirection();
         handleShoot(dir);
       }, 3000);
       autoFireRef.current = id as unknown as number;
-      // cleanup
       return () => {
         if (autoFireRef.current) {
           window.clearInterval(autoFireRef.current);
@@ -734,15 +823,12 @@ const ArenaPage: React.FC = () => {
       };
     }
     return;
-    // depend on relevant states to start/stop auto firing
-  }, [arenaType, isRunning, superpowerEnabled, firingMode, selectedPowers]);
+  }, [arenaType, isRunning, superpowerEnabled, firingMode, selectedPowers, projectileSpeedPerTick]);
 
-  // -------------------- projectile visuals (realistic + rotated) --------------------
-  const renderProjectileVisual = (p: { id: number; x: number; y: number; type: keyof typeof SUPER_BUBBLE_TYPES; vx: number; vy: number }) => {
-    // compute angle in degrees so the sprite points along its velocity
+  // -------------------- projectile visuals (realistic) --------------------
+  const renderProjectileVisual = (p: Projectile) => {
     const angleDeg = Math.atan2(p.vy, p.vx) * (180 / Math.PI);
 
-    // position + rotation via CSS transform: translate(-50%,-50%) to center, then rotate
     const baseStyle: React.CSSProperties = {
       position: "absolute",
       left: p.x,
@@ -753,7 +839,6 @@ const ArenaPage: React.FC = () => {
     };
 
     if (p.type === "flame") {
-      // layered flame silhouette with gradient and a soft tail
       return (
         <svg key={p.id} width={36} height={48} style={baseStyle} viewBox="0 0 36 48" preserveAspectRatio="xMidYMid meet">
           <defs>
@@ -763,7 +848,7 @@ const ArenaPage: React.FC = () => {
               <stop offset="70%" stopColor="#ff7043" />
               <stop offset="100%" stopColor="#b71c1c" />
             </radialGradient>
-            <filter id={`blur${p.id}`} x="-50%" y="-50%" width="200%" height="200%">
+            <filter id={`fblur${p.id}`} x="-50%" y="-50%" width="200%" height="200%">
               <feGaussianBlur stdDeviation="0.6" />
             </filter>
           </defs>
@@ -771,10 +856,10 @@ const ArenaPage: React.FC = () => {
           {/* outer glow */}
           <path
             d="M18 46 C20 36, 30 30, 30 22 C30 14, 22 12, 18 6 C14 12, 6 14, 6 22 C6 30, 14 36, 18 46 Z"
-            fill="url(#fg{p.id})"
+            fill={`url(#fg${p.id})`}
             opacity={0.18}
             transform="translate(0,-2)"
-            style={{ filter: `url(#blur${p.id})` }}
+            style={{ filter: `url(#fblur${p.id})` }}
           />
 
           {/* main flame */}
@@ -790,10 +875,13 @@ const ArenaPage: React.FC = () => {
         </svg>
       );
     } else if (p.type === "arrow") {
-      // arrow: shaft + head + fletching
-      // draw horizontally to the right and rotate via style
+      // arrow with smooth rotation transition
+      const arrowStyle: React.CSSProperties = {
+        ...baseStyle,
+        transition: "transform 120ms linear", // smooth rotation
+      };
       return (
-        <svg key={p.id} width={52} height={12} style={baseStyle} viewBox="0 0 52 12" preserveAspectRatio="xMidYMid meet">
+        <svg key={p.id} width={52} height={12} style={arrowStyle} viewBox="0 0 52 12" preserveAspectRatio="xMidYMid meet">
           <defs>
             <linearGradient id={`arrowGrad${p.id}`} x1="0" x2="1">
               <stop offset="0%" stopColor="#6b4f3b" />
@@ -801,18 +889,24 @@ const ArenaPage: React.FC = () => {
             </linearGradient>
           </defs>
           {/* shaft */}
-          <rect x="0" y="5" width="36" height="2" rx="1" fill="url(#arrowGrad{p.id})" />
+          <rect x="0" y="5" width="36" height="2" rx="1" fill={`url(#arrowGrad${p.id})`} />
           {/* head */}
           <polygon points="36,0 52,6 36,12" fill="#222" stroke="#111" strokeWidth="0.5" />
-          {/* fletching */}
-          <polygon points=" -2,2 2,6 -2,10" transform="translate(36,0)" fill="#8b6a4a" opacity={0.95} />
-          <polygon points=" -6,2 -2,6 -6,10" transform="translate(32,0)" fill="#6b4f3b" opacity={0.9} />
+          {/* fletching: two small fins */}
+          <g transform="translate(8,0)">
+            <polygon points="0,2 4,6 0,10" fill="#8b6a4a" opacity={0.95} />
+            <polygon points="-4,2 0,6 -4,10" fill="#6b4f3b" opacity={0.9} />
+          </g>
         </svg>
       );
     } else {
-      // bullet: capsule + tip
+      // bullet
+      const bulletStyle: React.CSSProperties = {
+        ...baseStyle,
+        transition: "transform 80ms linear",
+      };
       return (
-        <svg key={p.id} width={36} height={12} style={baseStyle} viewBox="0 0 36 12" preserveAspectRatio="xMidYMid meet">
+        <svg key={p.id} width={36} height={12} style={bulletStyle} viewBox="0 0 36 12" preserveAspectRatio="xMidYMid meet">
           {/* body capsule */}
           <rect x="0" y="2" width="22" height="8" rx="4" fill="#ffd54f" stroke="#e0a800" strokeWidth={0.6} />
           {/* tip */}
@@ -824,94 +918,53 @@ const ArenaPage: React.FC = () => {
     }
   };
 
-    // -------------------- Reset & Back helpers --------------------
-  const resetArenaKeepType = () => {
-    setIsRunning(false);
-    setWinner(null);
-    setWinnersList(null);
-    setWinnersImages(null);
-    setBubbles([]);
-    setSuperBubble(null);
-    setProjectiles([]);
-    imageListRef.current = [];
-    bossImgRef.current = "";
-    // clear auto-fire interval if any
-    if (autoFireRef.current) {
-      window.clearInterval(autoFireRef.current);
-      autoFireRef.current = null;
-    }
-  };
-
-  const resetArenaKeepTypePublic = () => {
-    resetArenaKeepType();
-    setTimeout(() => {
-      setWinner(null);
-      setIsRunning(false);
-      setWinnersList(null);
-      setWinnersImages(null);
-    }, 0);
-  };
-
-  const handleBack = () => {
-    setIsRunning(false);
-    setWinner(null);
-    setWinnersList(null);
-    setWinnersImages(null);
-    setBubbles([]);
-    setSuperBubble(null);
-    setProjectiles([]);
-    imageListRef.current = [];
-    bossImgRef.current = "";
-    setArenaType(null);
-    // clear auto-fire
-    if (autoFireRef.current) {
-      window.clearInterval(autoFireRef.current);
-      autoFireRef.current = null;
-    }
-  };
-
-  // -------------------- rendering helpers --------------------
-  const normalizedHealthForBubble = (b: BubbleData | null) => {
-    if (!b) return 0;
-    if (b === superBubble) {
-      return Math.max(0, Math.min(100, (b.health / SUPER_BUBBLE_HEALTH) * 100));
-    }
-    return Math.max(0, Math.min(100, b.health));
-  };
-
-  const renderSuperBubbleWithHealth = () => {
-    if (!superBubble) return null;
-    const barWidth = superBubble.radius * 2;
-    const healthPercent = Math.max(0, (superBubble.health / SUPER_BUBBLE_HEALTH) * 100);
-    return (
-      <>
-        <div
-          style={{
-            position: "absolute",
-            left: superBubble.x - superBubble.radius,
-            top: superBubble.y - superBubble.radius - 18,
-            width: barWidth,
-            height: 8,
-            backgroundColor: "gray",
-            borderRadius: 4,
-            overflow: "hidden",
-            border: "1px solid #333",
-            zIndex: 3000,
-          }}
-        >
-          <div style={{ width: `${healthPercent}%`, height: "100%", backgroundColor: "red", borderRadius: 4 }} />
-        </div>
-        <Bubble {...{ ...superBubble, health: normalizedHealthForBubble(superBubble) }} />
-      </>
-    );
-  };
-
-
-  // -------------------- projectile render wrapper (maps projectiles with rotation) --------------------
-  // We'll provide p.vx/p.vy to render function so it can compute rotation and draw.
+  // render all projectiles
   const renderAllProjectiles = () => {
-    return projectiles.map((p) => renderProjectileVisual({ ...p, vx: p.vx, vy: p.vy }));
+    return projectiles.map((p) => renderProjectileVisual(p));
   };
+
+  // -------------------- muzzle & hit effects rendering --------------------
+  const renderMuzzleFlashes = () =>
+    muzzleFlashes.map((m) => (
+      <div
+        key={`muzzle-${m.id}`}
+        style={{
+          position: "absolute",
+          left: m.x,
+          top: m.y,
+          transform: "translate(-50%,-50%)",
+          width: 56,
+          height: 56,
+          borderRadius: "50%",
+          pointerEvents: "none",
+          zIndex: 1400,
+          background: "radial-gradient(circle at 40% 30%, rgba(255,240,180,0.9) 0%, rgba(255,140,60,0.6) 30%, rgba(255,80,0,0.25) 60%, rgba(0,0,0,0) 100%)",
+          boxShadow: "0 0 10px rgba(255,160,50,0.6)",
+          animation: "muzzleFlashPulse 220ms ease-out forwards",
+        }}
+      />
+    ));
+
+  const renderHitEffects = () =>
+    hitEffects.map((h) => (
+      <div
+        key={`hit-${h.id}`}
+        style={{
+          position: "absolute",
+          left: h.x,
+          top: h.y,
+          transform: "translate(-50%,-50%)",
+          width: 34,
+          height: 34,
+          borderRadius: 8,
+          pointerEvents: "none",
+          zIndex: 1400,
+          background: "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.9) 0%, rgba(255,200,60,0.9) 30%, rgba(255,80,0,0.6) 60%, rgba(0,0,0,0) 100%)",
+          mixBlendMode: "screen",
+          animation: "hitPop 280ms ease-out forwards",
+        }}
+      />
+    ));
 
   // ---------- Leaderboard and boss card renderers ----------
   const renderLeaderboardNormal = () => {
@@ -920,6 +973,9 @@ const ArenaPage: React.FC = () => {
     const containerHeight = 450;
     const itemHeight = Math.floor((containerHeight - 40) / 10); // leave ~40px for header
     const imgSize = 34;
+
+    // Alive counter for NORMAL arena: simply number of bubbles
+    const aliveCount = bubbles.length;
 
     return (
       <div style={{ width: "100%", padding: 8, boxSizing: "border-box" }}>
@@ -1016,6 +1072,12 @@ const ArenaPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Alive counter at the bottom */}
+        <div style={{ marginTop: 8, paddingTop: 6, borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ color: "#bbb", fontSize: 13 }}>Active bubbles</div>
+          <div style={{ fontWeight: 700, color: "#fff", fontSize: 14 }}>{aliveCount}</div>
+        </div>
       </div>
     );
   };
@@ -1023,6 +1085,10 @@ const ArenaPage: React.FC = () => {
   const renderBossVersusCard = () => {
     const leftNormals = bubbles.slice(0, 10);
     const sbPct = superBubble ? Math.max(0, Math.round((superBubble.health / SUPER_BUBBLE_HEALTH) * 100)) : 0;
+
+    // Alive counter for BOSS arena: normals + super (if present)
+    const aliveCount = bubbles.length + (superBubble ? 1 : 0);
+
     return (
       <div style={{ width: "100%", padding: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -1045,12 +1111,18 @@ const ArenaPage: React.FC = () => {
               <div style={{ color: sbPct > 60 ? "green" : sbPct > 30 ? "yellow" : "red", fontSize: 12 }}>{sbPct}hp</div>
             </div>
           </div>
+
+          {/* Alive counter for boss */}
+          <div style={{ marginTop: 8, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.04)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ color: "#bbb", fontSize: 13 }}>Active entities</div>
+            <div style={{ fontWeight: 700, color: "#fff", fontSize: 14 }}>{aliveCount}</div>
+          </div>
         </div>
       </div>
     );
   };
 
-  // Winner overlay
+  // Winner overlay (same as before)
   const WinnerOverlay: React.FC<{ winnerBubble?: BubbleData; winners?: BubbleData[]; winnersImgs?: string[] }> = ({ winnerBubble, winners, winnersImgs }) => {
     // If winnersImgs provided -> show those images (this is the boss-change we implemented)
     if (winnersImgs && winnersImgs.length > 0) {
@@ -1277,6 +1349,17 @@ const ArenaPage: React.FC = () => {
             0% { opacity: 0; transform: translateY(20px); }
             100% { opacity: 1; transform: translateY(0); }
           }
+
+          @keyframes muzzleFlashPulse {
+            0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; }
+            80% { transform: translate(-50%,-50%) scale(1.05); opacity: 0.65; }
+            100% { transform: translate(-50%,-50%) scale(1.2); opacity: 0; }
+          }
+
+          @keyframes hitPop {
+            0% { transform: translate(-50%,-50%) scale(0.6); opacity: 1; }
+            100% { transform: translate(-50%,-50%) scale(1.5); opacity: 0; }
+          }
         `}</style>
       </div>
     );
@@ -1299,6 +1382,82 @@ const ArenaPage: React.FC = () => {
     );
   }
 
+  // -------------------- Reset & Back helpers --------------------
+  const resetArenaKeepType = () => {
+    setIsRunning(false);
+    setWinner(null);
+    setWinnersList(null);
+    setWinnersImages(null);
+    setBubbles([]);
+    setSuperBubble(null);
+    setProjectiles([]);
+    imageListRef.current = [];
+    bossImgRef.current = "";
+    setMuzzleFlashes([]);
+    setHitEffects([]);
+  };
+
+  const resetArenaKeepTypePublic = () => {
+    resetArenaKeepType();
+    setTimeout(() => {
+      setWinner(null);
+      setIsRunning(false);
+      setWinnersList(null);
+      setWinnersImages(null);
+    }, 0);
+  };
+
+  const handleBack = () => {
+    setIsRunning(false);
+    setWinner(null);
+    setWinnersList(null);
+    setWinnersImages(null);
+    setBubbles([]);
+    setSuperBubble(null);
+    setProjectiles([]);
+    imageListRef.current = [];
+    bossImgRef.current = "";
+    setArenaType(null);
+    setMuzzleFlashes([]);
+    setHitEffects([]);
+  };
+
+  // -------------------- rendering helpers --------------------
+  const normalizedHealthForBubble = (b: BubbleData | null) => {
+    if (!b) return 0;
+    if (b === superBubble) {
+      return Math.max(0, Math.min(100, (b.health / SUPER_BUBBLE_HEALTH) * 100));
+    }
+    return Math.max(0, Math.min(100, b.health));
+  };
+
+  const renderSuperBubbleWithHealth = () => {
+    if (!superBubble) return null;
+    const barWidth = superBubble.radius * 2;
+    const healthPercent = Math.max(0, (superBubble.health / SUPER_BUBBLE_HEALTH) * 100);
+    return (
+      <>
+        <div
+          style={{
+            position: "absolute",
+            left: superBubble.x - superBubble.radius,
+            top: superBubble.y - superBubble.radius - 18,
+            width: barWidth,
+            height: 8,
+            backgroundColor: "gray",
+            borderRadius: 4,
+            overflow: "hidden",
+            border: "1px solid #333",
+            zIndex: 3000,
+          }}
+        >
+          <div style={{ width: `${healthPercent}%`, height: "100%", backgroundColor: "red", borderRadius: 4 }} />
+        </div>
+        <Bubble {...{ ...superBubble, health: normalizedHealthForBubble(superBubble) }} />
+      </>
+    );
+  };
+
   // -------------------- main JSX --------------------
   return (
     <div className="arena-page" style={{ display: "flex", height: "100vh", width: "100vw", background: "#111" }}>
@@ -1307,14 +1466,47 @@ const ArenaPage: React.FC = () => {
           <div className="arena-container">
             <div ref={arenaRef} className={`arena ${winner || winnersList || winnersImages ? "arena-blur" : ""}`} style={{ position: "relative" }}>
               <div className="bubble-container" style={{ position: "relative", width: "100%", height: "100%" }}>
-                {bubbles.map((b) => (
-                  <Bubble key={b.id} {...{ ...b, health: Math.max(0, Math.min(100, b.health)) }} />
-                ))}
+                {/* Render bubbles.
+                    If radius < IMAGE_SHOW_RADIUS -> render a tiny dot (fast simple div, no image).
+                    If radius >= IMAGE_SHOW_RADIUS -> render the Bubble component with image.
+                    This preserves random placement & possible overlap, but shows tiny dots when many bubbles exist. */}
+                {bubbles.map((b) =>
+                  b.radius < IMAGE_SHOW_RADIUS ? (
+                    // tiny dot: simple div (cheap)
+                    <div
+                      key={b.id}
+                      title={`${Math.round(b.health)} hp`}
+                      style={{
+                        position: "absolute",
+                        left: b.x,
+                        top: b.y,
+                        transform: "translate(-50%,-50%)",
+                        width: Math.max(2, b.radius * 2),
+                        height: Math.max(2, b.radius * 2),
+                        borderRadius: "50%",
+                        background: "#ffffff",
+                        opacity: 0.9,
+                        boxShadow: "0 0 2px rgba(0,0,0,0.2)",
+                        pointerEvents: "none",
+                        zIndex: 100,
+                      }}
+                    />
+                  ) : (
+                    // show full Bubble component (image + health)
+                    <Bubble key={b.id} {...{ ...b, health: Math.max(0, Math.min(100, b.health)) }} />
+                  )
+                )}
 
                 {arenaType === ARENA_TYPES.BOSS && renderSuperBubbleWithHealth()}
 
                 {/* projectiles (render improved visuals) */}
                 {renderAllProjectiles()}
+
+                {/* muzzle flashes */}
+                {renderMuzzleFlashes()}
+
+                {/* hit effects */}
+                {renderHitEffects()}
               </div>
 
               {/* spikes visuals */}
@@ -1358,9 +1550,10 @@ const ArenaPage: React.FC = () => {
       </div>
 
       {/* sidebar controls */}
-      <div style={{ width: 260, minWidth: 220, display: "flex", flexDirection: "column", alignItems: "center", marginTop: 48, position: "relative", zIndex: 41, background: "rgba(24,24,24,0.95)", borderRadius: 16, padding: 12 }}>
+      <div style={{ width: 300, minWidth: 260, display: "flex", flexDirection: "column", alignItems: "center", marginTop: 48, position: "relative", zIndex: 41, background: "rgba(24,24,24,0.95)", borderRadius: 16, padding: 12 }}>
         <button
           onClick={() => {
+            // start: enable grace before starting the main loops (grace is set in the effect)
             setIsRunning(true);
             setWinner(null);
             setWinnersList(null);
@@ -1370,20 +1563,20 @@ const ArenaPage: React.FC = () => {
             projectilesRef.current = projectiles;
           }}
           disabled={isRunning}
-          style={{ width: 200, height: 40, marginBottom: 12 }}
+          style={{ width: 240, height: 40, marginBottom: 12 }}
         >
           ▶ Play
         </button>
 
-        <button onClick={() => setControlsOpen((s) => !s)} style={{ width: 200, height: 40, marginBottom: 12 }}>
+        <button onClick={() => setControlsOpen((s) => !s)} style={{ width: 240, height: 40, marginBottom: 12 }}>
           ⚙️ Settings
         </button>
 
-        <button onClick={handleBack} disabled={isRunning} style={{ width: 200, height: 40, marginBottom: 12 }}>
+        <button onClick={handleBack} disabled={isRunning} style={{ width: 240, height: 40, marginBottom: 12 }}>
           ⬅ Back
         </button>
 
-        <button onClick={resetArenaKeepTypePublic} disabled={!winner && !winnersList && !winnersImages} style={{ width: 200, height: 40, marginBottom: 12 }}>
+        <button onClick={resetArenaKeepTypePublic} disabled={!winner && !winnersList && !winnersImages} style={{ width: 240, height: 40, marginBottom: 12 }}>
           🔄 Reset
         </button>
 
@@ -1448,6 +1641,11 @@ const ArenaPage: React.FC = () => {
                       <input type="radio" name="firemode" value="auto" checked={firingMode === "auto"} onChange={() => setFiringMode("auto")} />
                       Auto (every 3s)
                     </label>
+                  </div>
+
+                  <div style={{ marginBottom: 8 }}>
+                    <label style={{ color: "#ccc" }}>Projectile speed: {projectileSpeedPerTick}px/tick</label>
+                    <input type="range" min={1} max={18} step={0.5} value={projectileSpeedPerTick} onChange={(e) => setProjectileSpeedPerTick(parseFloat(e.target.value))} style={{ width: "100%" }} />
                   </div>
 
                   {/* Manual shoot button (uses selected powers; direction random) */}

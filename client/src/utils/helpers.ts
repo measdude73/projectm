@@ -53,5 +53,4 @@ export function checkSpikeCollision(b: BubbleData, thorns: Spike[]): Spike | nul
 }
 
 
-
-
+ 
