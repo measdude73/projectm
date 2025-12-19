@@ -21,6 +21,7 @@ const MenuPage = () => {
         >
           Create Your Own Arena
         </button>
+        {/* Leaderboard is served on the server at http://localhost:5000/leaderboard */}
       </div>
     </div>
   );

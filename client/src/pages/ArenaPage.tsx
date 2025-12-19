@@ -2,6 +2,7 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { getRandom } from "../utils/helpers";
 import "../App.css";
+import statsClient, { recordHit, recordKill } from "../utils/statsClient";
 
 /**
  * Notes:
@@ -126,10 +127,9 @@ const bouncePairVel = (avx: number, avy: number, bvx: number, bvy: number, ax: n
   avy = avy - cy;
   bvx = bvx + cx;
   bvy = bvy + cy;
-  avx *= 0.98;
-  avy *= 0.98;
-  bvx *= 0.98;
-  bvy *= 0.98;
+  // do not apply additional damping here - keep collision energy consistent
+  // small, explicit damping was removed because it caused noticeable slowdowns over time
+  // (previously: multiply velocities by 0.98)
   return { avx, avy, bvx, bvy };
 };
 
@@ -216,8 +216,21 @@ const ArenaPage: React.FC = () => {
   const dyingRef = useRef<Record<number, number>>({});
   const deathQueueRef = useRef<number[]>([]);
   const deathQueueSetRef = useRef<Set<number>>(new Set());
+  const lastDamagerRef = useRef<Record<number, string | null>>({});
   const indexOfIdRef = useRef<Record<number, number>>({});
   const lastUiSnapshotTimeRef = useRef<number>(0);
+  const normalizePlayer = (p?: string | null) => {
+    if (!p) return '';
+    try {
+      const raw = String(p || '');
+      const stripped = raw.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '');
+      const parts = stripped.split('/');
+      return parts[parts.length - 1] || raw;
+    } catch (e) {
+      return String(p);
+    }
+  };
+  const currentGameRef = useRef<string | null>(null);
 
   const superBubbleRef = useRef<{ x: number; y: number; vx: number; vy: number; radius: number; health: number; imgSrc: string; id: number } | null>(null);
 
@@ -1061,12 +1074,12 @@ const ArenaPage: React.FC = () => {
           baseDamage = 30;
           DEATH_DELAY_MS = 30;
           MAX_DEATHS_PER_TICK = 60;
-          localSpeedMult = speedMultiplier * 0.8;
+          localSpeedMult = speedMultiplier * 0.9;
         } else {
           baseDamage = 10;
           DEATH_DELAY_MS = 60;
           MAX_DEATHS_PER_TICK = 20;
-          localSpeedMult = speedMultiplier * 0.5;
+          localSpeedMult = speedMultiplier * 0.8;
         }
 
         const DAMAGE_COOLDOWN_MS = 40;
@@ -1172,10 +1185,22 @@ const ArenaPage: React.FC = () => {
                 if (nowMs - lastA > DAMAGE_COOLDOWN_MS) {
                   hArr[i] = Math.max(0, hArr[i] - damage);
                   damageCooldownRef.current[idArr[i]] = nowMs;
+                  try {
+                    const rawAttacker = imgSrcsRef.current[imgIdxArr[j]] ?? `player-${idArr[j]}`;
+                    const attacker = normalizePlayer(rawAttacker);
+                    lastDamagerRef.current[idArr[i]] = attacker;
+                    try { recordHit(attacker); } catch (e) {}
+                  } catch (e) {}
                 }
                 if (nowMs - lastB > DAMAGE_COOLDOWN_MS) {
                   hArr[j] = Math.max(0, hArr[j] - damage);
                   damageCooldownRef.current[idArr[j]] = nowMs;
+                  try {
+                    const rawAttacker = imgSrcsRef.current[imgIdxArr[i]] ?? `player-${idArr[i]}`;
+                    const attacker = normalizePlayer(rawAttacker);
+                    lastDamagerRef.current[idArr[j]] = attacker;
+                    try { recordHit(attacker); } catch (e) {}
+                  } catch (e) {}
                 }
 
                 // small outward push to reduce sticking
@@ -1252,8 +1277,20 @@ const ArenaPage: React.FC = () => {
           if (foundIndex === undefined) {
             delete damageCooldownRef.current[idToRemove];
             delete dyingRef.current[idToRemove];
+            // ensure we clear any lastDamager leftover
+            delete lastDamagerRef.current[idToRemove];
             continue;
           }
+
+          // attribute kill to last damager if present
+          try {
+            const killer = lastDamagerRef.current[idToRemove];
+            if (killer) {
+              try { recordKill(killer); } catch (e) {}
+            }
+          } catch (e) {}
+          // clear attribution for removed id
+          delete lastDamagerRef.current[idToRemove];
 
           const currN = countRef.current;
           const idArrLocal = idListRef.current!;
@@ -1395,6 +1432,12 @@ const ArenaPage: React.FC = () => {
                   // normal takes damage from superbubble contact
                   hArr[i] = Math.max(0, hArr[i] - Math.max(10, Math.round(hArr[i] * 0.06)));
                   sbCollisionCooldownRef.current[idArr[i]] = nowMs;
+                  try {
+                    const rawAttacker = superBubbleRef.current?.imgSrc ?? "superbubble";
+                    const attacker = normalizePlayer(rawAttacker);
+                    lastDamagerRef.current[idArr[i]] = attacker;
+                    try { recordHit(attacker); } catch (e) {}
+                  } catch (e) {}
                   hits++;
                 }
               }
@@ -1639,6 +1682,7 @@ const ArenaPage: React.FC = () => {
       const nextProjectiles: Projectile[] = [];
       const projSnapshot = projectiles.slice();
       const n = countRef.current;
+      const idArr = idListRef.current!;
       const xArr = xRef.current!;
       const yArr = yRef.current!;
       const rArr = rRef.current!;
@@ -1654,6 +1698,12 @@ const ArenaPage: React.FC = () => {
           if (dx * dx + dy * dy < rArr[i] * rArr[i]) {
             const power = SUPER_BUBBLE_TYPES[p.type];
             hArr[i] = Math.max(0, hArr[i] - power.damage);
+            try {
+              const rawAttacker = superBubbleRef.current?.imgSrc ?? "superbubble";
+              const attacker = normalizePlayer(rawAttacker);
+              lastDamagerRef.current[idArr[i]] = attacker;
+              try { recordHit(attacker); } catch (e) {}
+            } catch (e) {}
             hit = true;
             const hitId = Date.now() + Math.floor(Math.random() * 10000);
             setHitEffects((h) => [...h, { id: hitId, x: xArr[i], y: yArr[i], createdAt: Date.now() }]);
@@ -1674,6 +1724,55 @@ const ArenaPage: React.FC = () => {
     return () => clearInterval(interval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isRunning, arenaType, projectiles]);
+
+  // Flush buffered stats shortly after a match ends so server receives final tallies
+  useEffect(() => {
+    if (isRunning) return;
+    const t = window.setTimeout(() => {
+      try {
+        if (statsClient && typeof (statsClient as any).flush === "function") {
+          void (statsClient as any).flush();
+        }
+      } catch (e) {}
+    }, 250);
+    return () => clearTimeout(t);
+  }, [isRunning]);
+  // also clear current game when match ends (in case there was no winner effect)
+  useEffect(() => {
+    if (isRunning) return;
+    // if there is a winner pending, don't clear here — winner effect will flush and clear
+    if (winner) return;
+    try {
+      if (statsClient && typeof (statsClient as any).setGame === "function") {
+        (statsClient as any).setGame(null, null);
+      }
+    } catch (e) {}
+    currentGameRef.current = null;
+  }, [isRunning, winner]);
+
+  // When a winner is set, post the winner for the current game and clear the game id
+  useEffect(() => {
+    if (!winner) return;
+    const gid = currentGameRef.current;
+    if (!gid) return;
+    (async () => {
+      try {
+        const player = normalizePlayer(winner.imgSrc) || `player-${winner.id}`;
+        await fetch('http://localhost:5000/api/stats/winner', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ game: gid, player, arena: arenaType || ARENA_TYPES.NORMAL }),
+        });
+        try { if (statsClient && typeof (statsClient as any).flush === 'function') await (statsClient as any).flush(); } catch (e) {}
+      } catch (e) {
+        console.warn('Failed to post winner', e);
+      } finally {
+        try { statsClient && typeof (statsClient as any).setGame === 'function' && (statsClient as any).setGame(null, null); } catch (e) {}
+        currentGameRef.current = null;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [winner]);
 
   // ---------- setters utilities ----------
 
@@ -2154,6 +2253,44 @@ const ArenaPage: React.FC = () => {
     if ((idListRef.current === null || countRef.current === 0) && uiBubblesSnapshot.length > 0) {
       setBubblesFromArraysToUi(uiBubblesSnapshot);
     }
+    // create a new game id for this match and tell statsClient to tag events with it
+    const gid = `game-${Date.now()}`;
+    currentGameRef.current = gid;
+    try {
+      statsClient && typeof (statsClient as any).setGame === "function" && (statsClient as any).setGame(gid, arenaType || ARENA_TYPES.NORMAL);
+    } catch (e) {}
+
+    // Immediately post a zero-count presence event for every participant so
+    // the server will create game-level entries for all players (prevents
+    // boss games from containing only the single player who later generated
+    // events). Include `arena` so entries go to the correct store.
+    try {
+      const seen = new Set();
+      const players: string[] = [];
+      // collect from current image list (normal bubbles)
+      const imgs = imgSrcsRef.current || [];
+      for (const s of imgs) {
+        if (!s) continue;
+        const key = (String(s || '') || '').replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || String(s);
+        if (!seen.has(key)) { seen.add(key); players.push(key); }
+      }
+      // include superbubble if present
+      if (superBubbleRef.current && superBubbleRef.current.imgSrc) {
+        const sb = String(superBubbleRef.current.imgSrc || '');
+        const key = sb.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || sb;
+        if (!seen.has(key)) { seen.add(key); players.push(key); }
+      }
+      // fire-and-forget presence posts
+      for (const p of players) {
+        try {
+          fetch('http://localhost:5000/api/stats/event', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ player: p, hits: 0, kills: 0, game: gid, arena: arenaType || ARENA_TYPES.NORMAL }),
+          }).catch(() => {});
+        } catch (e) {}
+      }
+    } catch (e) {}
     setIsRunning(true);
     setWinner(null);
     setWinnersList(null);
