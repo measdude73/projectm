@@ -9,6 +9,13 @@ const PORT = 5000;
 app.use(cors());
 app.use(express.json());
 
+// Serve static files for images
+app.use('/images', express.static(path.join(__dirname, 'images')));
+app.use('/bossimgs', express.static(path.join(__dirname, 'bossimgs')));
+app.use('/superbubbleimg', express.static(path.join(__dirname, 'superbubbleimg')));
+app.use('/superimgstorage', express.static(path.join(__dirname, 'superimgstorage')));
+
+
 // Persistent leaderboard stores (file-backed) - normal and boss separated
 const STATS_FILE = path.join(__dirname, "stats.json");
 const STATS_BOSS_FILE = path.join(__dirname, "stats_boss.json");
@@ -90,11 +97,76 @@ const saveStats = (which='normal') => {
 
 loadStats();
 
+// Reconcile existing stores on startup:
+// - Move any games in the normal store that appear to be boss games into the boss store
+// - Ensure boss store contains only hits (zero out kills/wins)
+const reconcileStores = () => {
+  try {
+    // move games from normal -> boss if any player key looks like a boss asset
+    Object.keys(leaderboardStore.games || {}).forEach((gid) => {
+      const g = leaderboardStore.games[gid];
+      const playerKeys = Object.keys((g && g.players) || {});
+      const hasBossKey = playerKeys.some(pk => detectBossByKey(pk) || detectBossByKey(g.winner));
+      if (hasBossKey) {
+        // ensure boss store game exists and copy
+        bossStore.games[gid] = g;
+        // remove from normal store
+        delete leaderboardStore.games[gid];
+        // move totals contributions for these players from normal -> boss (hits only)
+        playerKeys.forEach(pk => {
+          const normKey = normalizePlayerKey(pk);
+          const pStats = (g.players && g.players[pk]) || { hits: 0, kills: 0, wins: 0 };
+          // subtract from normal totals if present
+          if (leaderboardStore.totals && leaderboardStore.totals[normKey]) {
+            leaderboardStore.totals[normKey].hits = Math.max(0, (leaderboardStore.totals[normKey].hits || 0) - (pStats.hits || 0));
+            leaderboardStore.totals[normKey].kills = Math.max(0, (leaderboardStore.totals[normKey].kills || 0) - (pStats.kills || 0));
+            leaderboardStore.totals[normKey].wins = Math.max(0, (leaderboardStore.totals[normKey].wins || 0) - (pStats.wins || 0));
+            // if totals become empty, leave hits (0) — we'll clean zeros later
+          }
+          // add to boss totals (hits only)
+          const bKey = normalizePlayerKey(pk);
+          if (!bossStore.totals[bKey]) bossStore.totals[bKey] = { hits: 0, kills: 0, wins: 0 };
+          bossStore.totals[bKey].hits = (bossStore.totals[bKey].hits || 0) + (pStats.hits || 0);
+        });
+      }
+    });
+
+    // Ensure boss store has only hits (zero kills/wins across totals and games)
+    Object.keys(bossStore.totals || {}).forEach((p) => {
+      // remove kills/wins properties entirely for boss totals
+      delete bossStore.totals[p].kills;
+      delete bossStore.totals[p].wins;
+      bossStore.totals[p].hits = bossStore.totals[p].hits || 0;
+    });
+    Object.keys(bossStore.games || {}).forEach((gid) => {
+      const g = bossStore.games[gid];
+      g.players = g.players || {};
+      Object.keys(g.players).forEach((pk) => {
+        // remove kills/wins from game-level boss entries as well
+        delete g.players[pk].kills;
+        delete g.players[pk].wins;
+        g.players[pk].hits = g.players[pk].hits || 0;
+      });
+    });
+
+    // persist any modifications
+    saveStats('normal');
+    saveStats('boss');
+  } catch (e) {
+    console.error('Error reconciling stores', e);
+  }
+};
+
+reconcileStores();
 // helper: determine which store to use based on arena param, game id, or player name heuristic
 const detectBossByKey = (s) => {
   try {
     const k = String(s||'').toLowerCase();
-    return k.includes('boss') || k.includes('super') || k.includes('superbubble') || k.includes('bossimg');
+    // check for explicit markers
+    if (k.includes('boss') || k.includes('superbubble-') || k.includes('super') || k.includes('bossimg')) return true;
+    // check for superbubbleimg path
+    if (k.includes('/superbubbleimg/')) return true;
+    return false;
   } catch(e){return false}
 };
 const getStoreFor = ({ arena, game, player } = {}) => {
@@ -108,6 +180,48 @@ const getStoreFor = ({ arena, game, player } = {}) => {
   return { store: leaderboardStore, which: 'normal' };
 };
 
+// Helper: copy superbubble image to superimgstorage with game-specific name
+const storeSuperBubbleImage = (playerPath, gameId) => {
+  try {
+    if (!playerPath) return null;
+    
+    // Extract filename and try to find it
+    let sourceFile = null;
+    const dirs = [
+      path.join(__dirname, 'superbubbleimg'),
+      path.join(__dirname, 'bossimgs'),
+      path.join(__dirname, 'images')
+    ];
+    
+    // Search for the file in different directories
+    for (const dir of dirs) {
+      const files = fs.readdirSync(dir);
+      const match = files.find(f => playerPath.includes(f) || playerPath.includes(f.split('.')[0]));
+      if (match) {
+        sourceFile = path.join(dir, match);
+        break;
+      }
+    }
+    
+    if (!sourceFile || !fs.existsSync(sourceFile)) return null;
+    
+    // Create superimgstorage directory if it doesn't exist
+    const storageDir = path.join(__dirname, 'superimgstorage');
+    if (!fs.existsSync(storageDir)) fs.mkdirSync(storageDir, { recursive: true });
+    
+    // Copy to storage with game-specific name
+    const ext = path.extname(sourceFile);
+    const storageName = `game-${gameId}-superbubble${ext}`;
+    const destFile = path.join(storageDir, storageName);
+    fs.copyFileSync(sourceFile, destFile);
+    
+    return storageName;
+  } catch(e) {
+    console.error('Failed to store superbubble image', e);
+    return null;
+  }
+};
+
 // POST an event: { player: string, hits?: number, kills?: number }
 // POST an event: { player: string, hits?: number, kills?: number, game?: string }
 app.post("/api/stats/event", (req, res) => {
@@ -118,21 +232,64 @@ app.post("/api/stats/event", (req, res) => {
     const p = normalizePlayerKey(player);
     const h = Number(hits) || 0;
     const k = Number(kills) || 0;
+    // Log incoming event for diagnostics
+    console.log('[stats:event] incoming', { player: pRaw, normalized: p, hits: h, kills: k, game, arena });
 
-    const { store, which } = getStoreFor({ arena, game, player: pRaw });
+    // Determine correct store: prefer explicit arena param; otherwise, if a game bucket
+    // already exists in bossStore or leaderboardStore use that; otherwise fall back to heuristics.
+    let storeInfo = null;
+    if (arena === 'boss') storeInfo = { store: bossStore, which: 'boss' };
+    else if (arena === 'normal') storeInfo = { store: leaderboardStore, which: 'normal' };
+    else if (game) {
+      const gid = String(game);
+      if (bossStore.games && bossStore.games[gid]) storeInfo = { store: bossStore, which: 'boss' };
+      else if (leaderboardStore.games && leaderboardStore.games[gid]) storeInfo = { store: leaderboardStore, which: 'normal' };
+    }
+    if (!storeInfo) storeInfo = getStoreFor({ arena, game, player: pRaw });
+    const { store, which } = storeInfo;
+
+    console.log('[stats:event] routed to store', which, 'for player', p);
 
     // update totals in selected store
-    if (!store.totals[p]) store.totals[p] = { hits: 0, kills: 0, wins: 0 };
-    store.totals[p].hits += h;
-    store.totals[p].kills += k;
+    // debug: log boss events to help diagnose missing hits
+  
+    // For boss arena: only add to totals if NOT superbubble (superbubble only in game-level)
+    if (which !== 'boss' || !detectBossByKey(pRaw)) {
+      if (!store.totals[p]) store.totals[p] = { hits: 0, kills: 0, wins: 0 };
+      // Always record hits. For boss arena we intentionally ignore kills/wins.
+      store.totals[p].hits += h;
+      if (which !== 'boss') {
+        store.totals[p].kills += k;
+      }
+    }
 
     // update game-specific bucket if provided
+
     if (game) {
       const gid = String(game);
       if (!store.games[gid]) store.games[gid] = { players: {}, createdAt: Date.now() };
-      if (!store.games[gid].players[p]) store.games[gid].players[p] = { hits: 0, kills: 0, wins: 0 };
-      store.games[gid].players[p].hits += h;
-      store.games[gid].players[p].kills += k;
+      // Determine if this is a superbubble entry (for boss arena only)
+      const isSuperBubble = which === 'boss' && detectBossByKey(pRaw);
+      if (isSuperBubble) {
+        // Record superbubble hits INSIDE players as 'superbubble' key
+        if (!store.games[gid].players['superbubble']) {
+          store.games[gid].players['superbubble'] = { hits: 0 };
+          // Store the superbubble image on first hit
+          const sbImageName = storeSuperBubbleImage(pRaw, gid);
+          if (sbImageName) {
+            store.games[gid].players['superbubble'].image = sbImageName;
+          }
+        }
+        store.games[gid].players['superbubble'].hits += h;
+      } else {
+        // Normal player entry
+        if (!store.games[gid].players[p]) store.games[gid].players[p] = { hits: 0, kills: 0, wins: 0 };
+        // Record hits for all arenas. Only record kills for non-boss arenas.
+        store.games[gid].players[p].hits += h;
+        if (which !== 'boss') {
+          store.games[gid].players[p].kills += k;
+        }
+      }
     }
 
     saveStats(which);
@@ -149,23 +306,70 @@ app.post("/api/stats/event", (req, res) => {
 app.get("/api/stats", (req, res) => {
   try {
     const { game, scope, arena } = req.query || {};
-    const { store } = getStoreFor({ arena, game });
+    const { store, which } = getStoreFor({ arena, game });
     if (game) {
       const gid = String(game);
       const g = store.games[gid];
       if (!g) return res.json([]);
-      const entries = Object.keys(g.players || {}).map((p) => ({ player: p, ...g.players[p] }));
-      entries.sort((a, b) => (b.kills !== a.kills ? b.kills - a.kills : b.hits - a.hits));
+        const entries = Object.keys(g.players || {}).map((p) => {
+          const e = { player: p, ...g.players[p] };
+          if (which === 'boss') { delete e.kills; delete e.wins; }
+          return e;
+        });
+        if (which === 'boss') entries.sort((a, b) => (b.hits || 0) - (a.hits || 0));
+        else entries.sort((a, b) => (b.kills !== a.kills ? b.kills - a.kills : b.hits - a.hits));
       return res.json(entries);
     }
 
     // default: combined totals from selected store
-    const entries = Object.keys(store.totals || {}).map((p) => ({ player: p, ...store.totals[p] }));
-    entries.sort((a, b) => (b.kills !== a.kills ? b.kills - a.kills : b.hits - a.hits));
+    const entries = Object.keys(store.totals || {}).map((p) => {
+      const e = { player: p, ...store.totals[p] };
+      if (which === 'boss') { delete e.kills; delete e.wins; }
+      return e;
+    });
+    if (which === 'boss') entries.sort((a, b) => (b.hits || 0) - (a.hits || 0));
+    else entries.sort((a, b) => (b.kills !== a.kills ? b.kills - a.kills : b.hits - a.hits));
     res.json(entries);
   } catch (e) {
     console.error("Error reading leaderboard", e);
     res.status(500).json({ error: "failed to read stats" });
+  }
+});
+
+// Optional: return full game details (including superbubble if present)
+app.get("/api/stats/game-detail", (req, res) => {
+  try {
+    const { game, arena } = req.query || {};
+    if (!game) return res.status(400).json({ error: "game param required" });
+    const { store, which } = getStoreFor({ arena, game: String(game) });
+    const gid = String(game);
+    const g = store.games[gid];
+    if (!g) return res.json({ players: {}, superbubble: null });
+    
+    // Return game details: players + superbubble (if present inside players)
+    const result = {
+      players: {},
+      superbubble: null,
+      createdAt: g.createdAt || null,
+      winner: g.winner || null
+    };
+    
+    // Map players and extract superbubble if present
+    Object.keys(g.players || {}).forEach((p) => {
+      if (p === 'superbubble') {
+        // superbubble is inside players, extract it separately
+        result.superbubble = g.players[p];
+      } else {
+        const e = { ...g.players[p] };
+        if (which === 'boss') { delete e.kills; delete e.wins; }
+        result.players[p] = e;
+      }
+    });
+    
+    res.json(result);
+  } catch (e) {
+    console.error("Error reading game detail", e);
+    res.status(500).json({ error: "failed to read game detail" });
   }
 });
 
@@ -201,11 +405,24 @@ app.post("/api/stats/winner", (req, res) => {
     const { store, which } = getStoreFor({ arena, game, player });
     if (!store.games[gid]) store.games[gid] = { players: {}, createdAt: Date.now() };
     store.games[gid].winner = pKey;
-    // increment wins in both game-level and totals (use normalized key)
-    if (!store.games[gid].players[pKey]) store.games[gid].players[pKey] = { hits: 0, kills: 0, wins: 0 };
-    store.games[gid].players[pKey].wins = (store.games[gid].players[pKey].wins || 0) + 1;
-    if (!store.totals[pKey]) store.totals[pKey] = { hits: 0, kills: 0, wins: 0 };
-    store.totals[pKey].wins = (store.totals[pKey].wins || 0) + 1;
+    
+    // Do NOT create player entries for special winners like "team" or "superbubble"
+    const isSpecialWinner = pKey === 'team' || pKey === 'superbubble';
+    
+    if (!isSpecialWinner) {
+      // For regular players, create entry if needed
+      if (!store.games[gid].players[pKey]) store.games[gid].players[pKey] = { hits: 0, kills: 0, wins: 0 };
+      if (which !== 'boss') {
+        store.games[gid].players[pKey].wins = (store.games[gid].players[pKey].wins || 0) + 1;
+        if (!store.totals[pKey]) store.totals[pKey] = { hits: 0, kills: 0, wins: 0 };
+        store.totals[pKey].wins = (store.totals[pKey].wins || 0) + 1;
+      } else {
+        if (!store.totals[pKey]) store.totals[pKey] = { hits: 0, kills: 0, wins: 0 };
+        // ensure wins=0 for boss totals
+        store.totals[pKey].wins = 0;
+      }
+    }
+    
     saveStats(which);
     res.json({ ok: true, game: gid, winner: pKey, arena: which });
   } catch (e) {

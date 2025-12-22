@@ -1,82 +1,196 @@
 {
   "games": {
-    "game-1765731855746": {
-      "players": {
-        "7tqxjb - Copy - Copy.png": {
-          "hits": 8,
-          "kills": 0,
-          "wins": 2
-        }
-      },
-      "createdAt": 1765731858395,
-      "winner": "7tqxjb - Copy - Copy.png"
-    },
-    "game-1765731897818": {
-      "players": {
-        "7tqxjb - Copy - Copy.png": {
-          "hits": 11,
-          "kills": 2,
-          "wins": 1
-        }
-      },
-      "createdAt": 1765731900394,
-      "winner": "7tqxjb - Copy - Copy.png"
-    },
-    "game-1765732443555": {
-      "players": {
-        "7tqxjb - Copy - Copy.png": {
-          "hits": 5,
-          "kills": 0,
-          "wins": 2
-        }
-      },
-      "createdAt": 1765732446392,
-      "winner": "7tqxjb - Copy - Copy.png"
-    },
-    "game-1766157067443": {
-      "players": {
-        "7tqxjb - Copy - Copy.png": {
-          "hits": 24,
-          "kills": 1,
-          "wins": 0
-        }
-      },
-      "createdAt": 1766157070993
-    },
-    "game-1766159981152": {
+    "game-1766419394893": {
       "players": {
         "7tqxjb - Copy (4).png": {
-          "hits": 0,
+          "hits": 9,
           "kills": 0,
           "wins": 0
         },
         "7tqxjb - Copy - Copy.png": {
-          "hits": 24,
-          "kills": 1,
+          "hits": 7,
+          "kills": 0,
           "wins": 0
         },
         "bubble1 - Copy (2) - Copy.jpg": {
-          "hits": 0,
+          "hits": 9,
           "kills": 0,
           "wins": 0
+        },
+        "superbubble": {
+          "hits": 25,
+          "image": "game-game-1766419394893-superbubble.png"
         }
       },
-      "createdAt": 1766159981199
+      "createdAt": 1766419394918
+    },
+    "game-1766419545853": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 9,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 5,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 6,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 8,
+          "kills": 0,
+          "wins": 0
+        },
+        "superbubble": {
+          "hits": 20,
+          "image": "game-game-1766419545853-superbubble.jpg"
+        }
+      },
+      "createdAt": 1766419545870
+    },
+    "game-1766419906503": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 11,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 7,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 1,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 13,
+          "kills": 0,
+          "wins": 0
+        },
+        "superbubble": {
+          "hits": 20,
+          "image": "game-game-1766419906503-superbubble.jpg"
+        }
+      },
+      "createdAt": 1766419906515,
+      "winner": "bubble1 - Copy (2) - Copy.jpg"
+    },
+    "game-1766420846816": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 4,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 4,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 6,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 8,
+          "kills": 0,
+          "wins": 0
+        },
+        "superbubble": {
+          "hits": 25,
+          "image": "game-game-1766420846816-superbubble.jpg"
+        }
+      },
+      "createdAt": 1766420846821
+    },
+    "game-1766421213949": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 11,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 9,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 11,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 9,
+          "kills": 0,
+          "wins": 0
+        },
+        "superbubble": {
+          "hits": 25,
+          "image": "game-game-1766421213949-superbubble.jpg"
+        }
+      },
+      "createdAt": 1766421213963,
+      "winner": "team"
+    },
+    "game-1766421420328": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 1,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 1,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 2,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 14,
+          "kills": 0,
+          "wins": 0
+        },
+        "superbubble": {
+          "hits": 6,
+          "image": "game-game-1766421420328-superbubble.jpg"
+        }
+      },
+      "createdAt": 1766421420353,
+      "winner": "superbubble"
     }
   },
   "totals": {
-    "7tqxjb - Copy - Copy.png": {
-      "hits": 72,
-      "kills": 4,
-      "wins": 5
-    },
     "7tqxjb - Copy (4).png": {
-      "hits": 0,
+      "hits": 45,
+      "kills": 0,
+      "wins": 0
+    },
+    "7tqxjb - Copy - Copy.png": {
+      "hits": 33,
       "kills": 0,
       "wins": 0
     },
     "bubble1 - Copy (2) - Copy.jpg": {
-      "hits": 0,
+      "hits": 61,
+      "kills": 0,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+      "hits": 26,
       "kills": 0,
       "wins": 0
     }

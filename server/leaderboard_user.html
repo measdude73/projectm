@@ -37,6 +37,7 @@
     @keyframes panelIn{from{opacity:0;transform:translateY(8px) scale(.99)}to{opacity:1;transform:none}}
     .row{display:grid;grid-template-columns:48px 1fr 90px 90px 80px 100px;gap:8px;padding:12px 16px;align-items:center}
     .row.header{font-weight:700;background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));}
+    .row.winner{background:linear-gradient(90deg, rgba(16,185,129,0.15), rgba(16,185,129,0.08));border-left:3px solid #10b981;box-shadow:inset 0 0 20px rgba(16,185,129,0.1)}
     .player{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
     /* 3D tilt effect on hover */
@@ -44,6 +45,32 @@
     .tilt-card{transition:transform 0.15s ease-out;transform-style:preserve-3d}
 
     .muted{color:rgba(255,255,255,0.6);font-size:13px}
+
+    /* Winner highlights */
+    .winner-highlight{
+      border:3px solid #10b981 !important;
+      box-shadow:0 0 15px #10b981, 0 0 30px rgba(16,185,129,0.6), 0 0 45px rgba(16,185,129,0.4), inset 0 0 10px rgba(16,185,129,0.2);
+      transform:scale(1.08);
+      transition:all 250ms ease;
+      position:relative;
+    }
+    .winner-highlight::after{
+      content:'';
+      position:absolute;
+      top:-3px;
+      left:-3px;
+      right:-3px;
+      bottom:-3px;
+      border:2px solid #10b981;
+      border-radius:inherit;
+      box-shadow:0 0 20px #10b981, 0 0 40px rgba(16,185,129,0.5);
+      pointer-events:none;
+      animation:neon-pulse 2s ease-in-out infinite;
+    }
+    @keyframes neon-pulse{
+      0%, 100%{box-shadow:0 0 20px #10b981, 0 0 40px rgba(16,185,129,0.5)}
+      50%{box-shadow:0 0 30px #10b981, 0 0 60px rgba(16,185,129,0.8)}
+    }
 
     /* responsive adjustments */
     @media (max-width:640px){.row{grid-template-columns:32px 1fr 60px 60px 60px;padding:8px}}
@@ -56,9 +83,9 @@
       <div class="glow" aria-hidden></div>
       <div style="position:relative;z-index:2;padding:12px">
         <div class="controls">
-          <label for="gameSelect" class="muted">View:</label>
-          <label for="modeSelect" class="muted">Mode:</label>
+          <label for="gameSelect" class="muted">Mode:</label>
           <select id="modeSelect"><option value="normal">Normal Arena</option><option value="boss">Boss Arena</option></select>
+          <label for="modeSelect" class="muted">View:</label>
           <select id="gameSelect"></select>
           <input id="search" placeholder="Search player..." />
           <button id="refresh">Refresh</button>
@@ -105,6 +132,7 @@
 
     let gamesCache = [];
     let currentList = [];
+    let currentWinner = null;
       function isBossGame(game){
         if(!game) return false;
         // if server-provided metadata includes winner or id containing boss hints
@@ -167,7 +195,7 @@
     }
 
     // Normal arena rows (players)
-    function showRows(data){
+    function showRows(data, winner){
       // ensure header visible for normal mode
       const hdr = document.querySelector('.row.header'); if(hdr) hdr.style.display = 'grid';
       const q = (searchInput.value || '').toLowerCase().trim();
@@ -180,12 +208,16 @@
       filtered.forEach(r=>{ r._points = ((r.kills||0)*5 + (r.hits||0)*3 + (r.wins||0)*10); });
       filtered.sort((a,b)=>b._points - a._points || (b.kills||0)-(a.kills||0));
 
+      // Normalize winner name for comparison
+      const winnerName = winner ? String(winner).replace(/^https?:\/\/[^\/]+\//,'').replace(/^\/+/, '').split('/').pop() : null;
+
       rowsEl.innerHTML = filtered.map((r,i)=>{
         const raw = String(r.player||'');
         const player = raw.replace(/^https?:\/\/[^\/]+\//,'').replace(/^\/+/, '').split('/').pop()||raw;
         const kills = r.kills||0; const hits = r.hits||0; const wins = r.wins||0;
         const points = r._points || ((kills*5)+(hits*3)+(wins*10));
-        return `<div class="row player-row" data-idx="${i}" style="cursor:pointer"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="text-align:right">${kills}</div><div style="text-align:right">${hits}</div><div style="text-align:right">${wins}</div><div style="text-align:right">${points}</div></div>`;
+        const isWinner = winnerName && player === winnerName;
+        return `<div class="row player-row ${isWinner ? 'winner' : ''}" data-idx="${i}" style="cursor:pointer"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="text-align:right">${kills}</div><div style="text-align:right">${hits}</div><div style="text-align:right">${wins}</div><div style="text-align:right">${points}</div></div>`;
       }).join('');
       // attach click handlers to rows to open detail panel
       const rowEls = rowsEl.querySelectorAll('.player-row');
@@ -228,22 +260,36 @@
     // Show boss game detail: left = boss image + stats (hits,kills,wins,points), right = list of normal images (hits only)
     async function loadBossGameDetail(gameId, meta){
       try{
-        const url = `/api/stats?game=${encodeURIComponent(gameId)}&arena=boss`;
+        console.log('[loadBossGameDetail] fetching game:', gameId);
+        const url = `/api/stats/game-detail?game=${encodeURIComponent(gameId)}&arena=boss`;
+        console.log('[loadBossGameDetail] url:', url);
         const res = await fetch(url);
-        if(!res.ok) throw new Error('failed');
-        const entries = await res.json();
-        // convert entries array to map-style object expected by renderer
-        const playersMap = {};
-        entries.forEach(e=>{ playersMap[e.player] = { hits: e.hits||0, kills: e.kills||0, wins: e.wins||0 }; });
-        const gameObj = Object.assign({}, meta || {}, { id: gameId, players: playersMap, winner: (meta && meta.winner) || null });
+        if(!res.ok) {
+          console.error('[loadBossGameDetail] fetch failed:', res.status);
+          throw new Error('failed');
+        }
+        const gameData = await res.json();
+        console.log('[loadBossGameDetail] received data:', gameData);
+        
+        // Convert to gameObj format expected by renderer
+        const gameObj = {
+          id: gameId, 
+          players: gameData.players || {}, 
+          superbubble: gameData.superbubble || null,
+          winner: gameData.winner || null,
+          createdAt: gameData.createdAt || null
+        };
+        console.log('[loadBossGameDetail] rendering with:', gameObj);
         renderBossGameDetail(gameObj);
       }catch(e){
         console.error('Failed to load boss game detail', e);
-        rowsEl.innerHTML = '<div class="row"><div class="muted" style="grid-column:1/-1;padding:12px">Failed to load game details</div></div>';
+        const panel = document.getElementById('detailPanel');
+        if(panel) panel.innerHTML = '<div class="muted" style="padding:12px">Failed to load game details</div>';
       }
     }
 
     function renderBossGameDetail(gameObj){
+      console.log('[renderBossGameDetail] called with:', gameObj);
       const panel = document.getElementById('detailPanel');
       const listView = document.getElementById('listView');
       if(listView) listView.style.display = 'none';
@@ -251,48 +297,82 @@
       const persistentBackBtn = document.getElementById('persistentBack');
       if(persistentBackBtn) persistentBackBtn.style.display = 'inline-block';
 
-      // identify boss image: prefer explicit winner, else pick player with highest (kills+hits)
       const players = gameObj.players || {};
-      let bossKey = gameObj.winner || Object.keys(players)[0];
-      if(!bossKey){ panel.innerHTML = '<div class="muted">No data</div>'; return; }
-      if(!gameObj.winner){
-        // choose max
-        bossKey = Object.keys(players).reduce((a,b)=>{ const sa=(players[a].kills||0)+(players[a].hits||0); const sb=(players[b].kills||0)+(players[b].hits||0); return sa>=sb? a:b; });
+      const superbubble = gameObj.superbubble || { hits: 0 };
+      console.log('[renderBossGameDetail] players:', players);
+      console.log('[renderBossGameDetail] superbubble:', superbubble);
+      
+      // Build list of normal players (exclude 'superbubble' key)
+      const normalKeys = Object.keys(players)
+        .filter(k => k !== 'superbubble')
+        .map(k => ({ key: k, hits: players[k].hits || 0 }));
+
+      console.log('[renderBossGameDetail] normal keys:', normalKeys);
+
+      // Determine winner - check if superbubble has winner field, or use currentWinner
+      const winner = gameObj.winner || currentWinner;
+      const winnerName = winner ? String(winner).replace(/^https?:\/\/[^\/]+\//,'').replace(/^\/+/, '').split('/').pop() : null;
+      
+      // Detect if superbubble or team won
+      let superbubbleWon = false;
+      let teamWon = false;
+      if(winnerName) {
+        if(winnerName.toLowerCase() === 'superbubble') {
+          superbubbleWon = true;
+        } else if(winnerName.toLowerCase() === 'team') {
+          teamWon = true;
+        }
       }
 
-      const boss = players[bossKey] || {hits:0,kills:0,wins:0};
-      const bossName = bossKey.replace(/^https?:\/\/[^\/]+\//,'').split('/').pop();
-      const bossPoints = (boss.kills||0)*5 + (boss.hits||0)*3 + (boss.wins||0)*10;
-
-      // build right side normal players list (exclude boss)
-      const normalKeys = Object.keys(players).filter(k=>k!==bossKey).map(k=>({ key:k, hits: players[k].hits||0 }));
+      let winnerText = '';
+      if(superbubbleWon) {
+        winnerText = '🏆 SuperBubble Wins!';
+      } else if(teamWon) {
+        winnerText = '🏆 Team Wins!';
+      }
 
       panel.innerHTML = `
-        <div class="detailFull" style="display:flex;gap:18px;align-items:flex-start">
-          <div style="flex:0 0 360px">
-            <div class="detailAvatar pulse" style="width:320px;height:320px;border-radius:12px;overflow:hidden">
-              <img src="/bossimgs/${encodeURIComponent(bossName)}" onerror="this.onerror=null;this.src='/images/${encodeURIComponent(bossName)}'" style="width:100%;height:100%;object-fit:cover" />
-            </div>
-            <div style="margin-top:10px">
-              <div style="font-weight:800">${bossName}</div>
-              <div class="muted">Boss — Hits: ${boss.hits||0} • Kills: ${boss.kills||0} • Wins: ${boss.wins||0}</div>
-              <div style="margin-top:6px;font-weight:700">Points: ${bossPoints}</div>
-            </div>
-          </div>
-          <div style="flex:0 0 80px;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px;color:rgba(255,255,255,0.85)">VS</div>
-          <div style="flex:1">
-            <h3 style="margin:0 0 8px 0">Normal Images</h3>
-            <div class="card" style="padding:8px;display:grid;grid-template-columns:72px 1fr 88px;gap:8px;align-items:center">
-              ${normalKeys.length===0?'<div class="muted" style="grid-column:1/-1;padding:8px">No normal images</div>':normalKeys.map(n=>{
+        <div class="detailFull" style="display:flex;flex-direction:column;gap:24px;padding:16px;width:100%">
+          ${winnerText ? `<div style="text-align:center;padding:8px 16px;background:linear-gradient(90deg, rgba(16,185,129,0.2), rgba(16,185,129,0.1));border-radius:10px;border:2px solid #10b981;margin:0 0 12px 0;line-height:1.2;min-height:40px;display:flex;align-items:center;justify-content:center">
+            <div style="font-size:22px;font-weight:900;color:#10b981;text-shadow:0 0 10px rgba(16,185,129,0.5)">${winnerText}</div>
+          </div>` : ''}
+          
+<div style="display:flex;flex-direction:row;gap:20px;align-items:flex-start;justify-content:center;width:100%;flex-wrap:wrap">            <!-- LEFT: Team (Normal Bubbles) -->
+            <div style="display:flex;flex-direction:row;gap:15px;align-items:flex-end;flex-wrap:nowrap;min-width:0">
+              ${normalKeys.length === 0 ? '<div class="muted">No team</div>' : normalKeys.map(n => {
                 const nName = n.key.replace(/^https?:\/\/[^\/]+\//,'').split('/').pop();
-                const isWinner = shortKey(gameObj.winner||'') === shortKey(n.key||'');
-                const imgStyle = isWinner ? 'width:64px;height:64px;object-fit:cover;border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,0.5)' : 'width:64px;height:64px;object-fit:cover;border-radius:8px;filter:grayscale(100%);opacity:0.6';
-                return `<div style="display:flex;align-items:center;gap:8px"><img src="/images/${encodeURIComponent(nName)}" onerror="this.onerror=null;this.src='/bossimgs/${encodeURIComponent(nName)}'" style="${imgStyle}" /></div><div style="overflow:hidden;white-space:nowrap;text-overflow:ellipsis">${nName}</div><div style="text-align:right" class="muted">Hits: ${n.hits}</div>`;
+                const isTeamWinner = teamWon;
+                const winnerClass = isTeamWinner ? 'winner-highlight' : '';
+                return `
+                  <div style="flex:0 0 auto;text-align:center">
+                    <div class="${winnerClass}" style="width:120px;height:120px;border-radius:10px;overflow:hidden;background:#1f1f2e;margin-bottom:8px;border:2px solid #0ea5e9;flex-shrink:0;position:relative">
+                      <img src="/images/${encodeURIComponent(nName)}" alt="${nName}" style="width:100%;height:100%;object-fit:cover" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%27120%27 height=%27120%27><rect width=%27100%25%27 height=%27100%25%27 fill=%270ea5e9%27/><text x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 font-size=%2740%27 fill=%27white%27>${encodeURIComponent(nName.slice(0,2).toUpperCase())}</text></svg>'">
+                    </div>
+                    <div style="font-weight:700;font-size:11px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:120px">${nName}</div>
+                    <div style="font-weight:700;font-size:16px;color:#10b981">${n.hits}</div>
+                  </div>
+                `;
               }).join('')}
+            </div>
+
+            <!-- MIDDLE: VS Symbol -->
+            <div style="flex:0 0 auto;text-align:center;padding:0 15px">
+              <div style="font-weight:900;font-size:42px;color:rgba(255,255,255,0.5)">VS</div>
+            </div>
+
+            <!-- RIGHT: Superbubble Boss -->
+            <div style="flex:0 0 auto;text-align:center">
+              <div class="${superbubbleWon ? 'winner-highlight' : ''}" style="width:160px;height:160px;border-radius:12px;overflow:hidden;background:#1f1f2e;margin-bottom:10px;border:3px solid #7c3aed;flex-shrink:0;position:relative">
+                <img src="${superbubble && superbubble.image ? '/superimgstorage/' + encodeURIComponent(superbubble.image) : '/superbubbleimg/placeholder'}" alt="superbubble" style="width:100%;height:100%;object-fit:cover" onerror="this.src='data:image/svg+xml;utf8,<svg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%27160%27><rect width=%27100%25%27 height=%27100%25%27 fill=%237c3aed%27/><text x=%2750%25%27 y=%2750%25%27 dominant-baseline=%27middle%27 text-anchor=%27middle%27 font-size=%2760%27 fill=%27white%27>⭐</text></svg>'">
+              </div>
+              <div style="font-weight:800;font-size:14px;margin-bottom:6px">SuperBubble</div>
+              <div style="font-weight:700;font-size:24px;color:#0ea5e9">${superbubble.hits || 0}</div>
+              <div class="muted" style="font-size:11px;margin-top:3px">🌟 BOSS</div>
             </div>
           </div>
         </div>
       `;
+      console.log('[renderBossGameDetail] HTML rendered');
     }
 
     async function fetchGames(mode='normal'){
@@ -321,26 +401,67 @@
         // Mode-aware fetching
         const mode = (modeSelect && modeSelect.value) || 'normal';
         if(mode === 'boss'){
-          // ensure gamesCache is fresh and render boss game list
-          await fetchGames('boss');
-          showBossGameList(gamesCache);
+          // In boss mode: if a specific game is selected, show detailed game view with images
+          if(selection && selection !== 'combined') {
+            console.log('[fetchStatsFor] boss mode - loading game detail for:', selection);
+            const meta = gamesCache.find(x => x.id === selection);
+            loadBossGameDetail(selection, meta);
+            return;
+          }
+          // Otherwise show aggregated stats list
+          let url = '/api/stats?arena=boss';
+          const res = await fetch(url);
+          if(!res.ok) throw new Error('network');
+          const data = await res.json();
+          console.log('[fetchStatsFor] boss stats combined:', data);
+          currentList = data || [];
+          showBossStatsAsList(currentList);
           return;
         }
-        // normal mode
-        let url = '/api/stats';
-        if(selection && selection!=='combined') url = `/api/stats?game=${encodeURIComponent(selection)}`;
+        // normal mode - fetch all stats with arena=normal
+        let url = '/api/stats?arena=normal';
+        if(selection && selection!=='combined') url = `/api/stats?game=${encodeURIComponent(selection)}&arena=normal`;
         const res = await fetch(url);
         if(!res.ok) throw new Error('network');
         const data = await res.json();
+        console.log('[fetchStatsFor] normal stats:', data);
         // compute points per player and sort by points desc
         const list = (data||[]).map(r=>({ ...r, _points: ((r.kills||0)*5 + (r.hits||0)*3 + (r.wins||0)*10) }));
         list.sort((a,b)=>b._points - a._points || (b.kills||0)-(a.kills||0));
         currentList = list;
-        showRows(currentList);
+        // Get winner for this game if game-specific
+        if(selection && selection!=='combined'){
+          const gameMeta = gamesCache.find(g => g.id === selection);
+          currentWinner = gameMeta ? gameMeta.winner : null;
+        } else {
+          currentWinner = null;
+        }
+        showRows(currentList, currentWinner);
       }catch(e){
         console.error(e);
         rowsEl.innerHTML = '<div class="row"><div class="muted" style="grid-column:1/-1;padding:12px">Failed to load leaderboard</div></div>';
       }
+    }
+
+    // Show boss stats as a list (like admin leaderboard)
+    function showBossStatsAsList(data) {
+      const hdr = document.querySelector('.row.header');
+      if(hdr) {
+        hdr.style.display = 'grid';
+        hdr.innerHTML = '<div style="width:48px">#</div><div>Player</div><div style="grid-column:3/-1;text-align:right">Hits</div>';
+      }
+      const q = (searchInput.value || '').toLowerCase().trim();
+      const filtered = data.filter(r => !q || (String(r.player||'').toLowerCase().includes(q)));
+      if (!filtered || filtered.length === 0) {
+        rowsEl.innerHTML = '<div class="row"><div class="muted" style="grid-column:1/-1;padding:12px">No data yet.</div></div>';
+        return;
+      }
+      rowsEl.innerHTML = filtered.map((r, i) => {
+        const raw = String(r.player || '');
+        const player = raw.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || raw;
+        const hits = r.hits || 0;
+        return `<div class="row"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="grid-column:3/-1;text-align:right">Hits: ${hits}</div></div>`;
+      }).join('');
     }
     
     // extend fetchStatsFor to update top player card when data loaded (only in normal mode)
@@ -348,7 +469,13 @@
     fetchStatsFor = async function(selection){
       await _origFetch(selection);
       const mode = (modeSelect && modeSelect.value) || 'normal';
-      if(mode === 'normal') showTopPlayer(currentList && currentList.length>0 ? currentList[0] : null);
+      if(mode === 'normal') {
+        showTopPlayer(currentList && currentList.length>0 ? currentList[0] : null);
+      } else {
+        // boss mode: hide top player card
+        const tp = document.getElementById('topPlayer');
+        if(tp) tp.innerHTML = '';
+      }
     };
 
     function showDetailPanel(p){
@@ -411,9 +538,9 @@
       // re-render rows to ensure click handlers are active (mode-aware)
       const mode = (modeSelect && modeSelect.value) || 'normal';
       if(mode === 'boss'){
-        showBossGameList(gamesCache);
+        showBossStatsAsList(currentList);
       } else {
-        showRows(currentList);
+        showRows(currentList, currentWinner);
       }
     }
 
@@ -423,15 +550,26 @@
       requestAnimationFrame(step);
     }
 
-    refreshBtn.addEventListener('click', ()=>{ const mode = (modeSelect && modeSelect.value) || 'normal'; fetchGames(mode); fetchStatsFor(gameSelect.value||'combined'); });
+    refreshBtn.addEventListener('click', ()=>{ 
+      const mode = (modeSelect && modeSelect.value) || 'normal';
+      fetchGames(mode).then(()=>fetchStatsFor(gameSelect.value||'combined')); 
+    });
     gameSelect.addEventListener('change', ()=>fetchStatsFor(gameSelect.value||'combined'));
     searchInput.addEventListener('input', ()=>{
       const mode = (modeSelect && modeSelect.value) || 'normal';
-      if(mode === 'normal') showRows(currentList);
+      if(mode === 'normal') showRows(currentList, currentWinner);
+      else showBossStatsAsList(currentList);
     });
-    if(modeSelect){ modeSelect.addEventListener('change', ()=>{ if(modeSelect.value==='boss'){ fetchGames('boss').then(()=>fetchStatsFor('combined')); } else { fetchGames('normal').then(()=>fetchStatsFor(gameSelect.value||'combined')); } }); }
+    if(modeSelect){ modeSelect.addEventListener('change', ()=>{ 
+      const mode = modeSelect.value;
+      fetchGames(mode).then(()=>fetchStatsFor('combined')); 
+    }); }
 
-    (async()=>{ const mode = (modeSelect && modeSelect.value) || 'normal'; await fetchGames(mode); fetchStatsFor(gameSelect.value||'combined'); })();
+    (async()=>{ 
+      const mode = (modeSelect && modeSelect.value) || 'normal'; 
+      await fetchGames(mode); 
+      fetchStatsFor(gameSelect.value||'combined'); 
+    })();
 
     // 3D tilt effect (subtle) for the hero card
     (function(){

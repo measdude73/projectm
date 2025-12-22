@@ -1,4 +1,428 @@
 {
-  "games": {},
-  "totals": {}
+  "games": {
+    "game-1766420031204": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 8,
+          "kills": 1,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy copy.png": {
+          "hits": 8,
+          "kills": 1,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 6,
+          "kills": 3,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 4,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 8,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 3,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3) - Copy.png": {
+          "hits": 6,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3).png": {
+          "hits": 5,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 6,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 6,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (3).png": {
+          "hits": 6,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 8,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 5,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 8,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy.png": {
+          "hits": 7,
+          "kills": 0,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 11,
+          "kills": 1,
+          "wins": 0
+        }
+      },
+      "createdAt": 1766420031204
+    },
+    "game-1766420061878": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 10,
+          "kills": 3,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy copy.png": {
+          "hits": 9,
+          "kills": 1,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2).png": {
+          "hits": 9,
+          "kills": 2,
+          "wins": 1
+        },
+        "brave - Copy - Copy - Copy (3) - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3).png": {
+          "hits": 11,
+          "kills": 2,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (3).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 3,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        }
+      },
+      "createdAt": 1766420061875,
+      "winner": "brave - Copy - Copy - Copy (2).png"
+    },
+    "game-1766420775649": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy copy.png": {
+          "hits": 9,
+          "kills": 2,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 9,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2).png": {
+          "hits": 12,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3) - Copy.png": {
+          "hits": 10,
+          "kills": 2,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3).png": {
+          "hits": 9,
+          "kills": 3,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 3,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (3).png": {
+          "hits": 12,
+          "kills": 2,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 12,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy.png": {
+          "hits": 9,
+          "kills": 1,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 6,
+          "kills": 0,
+          "wins": 0
+        }
+      },
+      "createdAt": 1766420775644
+    },
+    "game-1766420802233": {
+      "players": {
+        "7tqxjb - Copy (4).png": {
+          "hits": 10,
+          "kills": 2,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "7tqxjb - Copy - Copy.png": {
+          "hits": 11,
+          "kills": 3,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy - Copy.png": {
+          "hits": 11,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3) - Copy.png": {
+          "hits": 8,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy (3).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy (3).png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy (2).png": {
+          "hits": 13,
+          "kills": 1,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 7,
+          "kills": 1,
+          "wins": 1
+        },
+        "brave - Copy - Copy - Copy - Copy - Copy.png": {
+          "hits": 10,
+          "kills": 0,
+          "wins": 0
+        },
+        "brave - Copy - Copy - Copy - Copy.png": {
+          "hits": 8,
+          "kills": 5,
+          "wins": 0
+        },
+        "bubble1 - Copy (2) - Copy.jpg": {
+          "hits": 10,
+          "kills": 1,
+          "wins": 0
+        }
+      },
+      "createdAt": 1766420802233,
+      "winner": "brave - Copy - Copy - Copy - Copy - Copy - Copy.png"
+    }
+  },
+  "totals": {
+    "7tqxjb - Copy (4).png": {
+      "hits": 38,
+      "kills": 7,
+      "wins": 0
+    },
+    "7tqxjb - Copy - Copy copy.png": {
+      "hits": 36,
+      "kills": 4,
+      "wins": 0
+    },
+    "7tqxjb - Copy - Copy.png": {
+      "hits": 36,
+      "kills": 7,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy (2) - Copy - Copy.png": {
+      "hits": 41,
+      "kills": 4,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy (2) - Copy.png": {
+      "hits": 38,
+      "kills": 3,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy (2).png": {
+      "hits": 41,
+      "kills": 6,
+      "wins": 1
+    },
+    "brave - Copy - Copy - Copy (3) - Copy.png": {
+      "hits": 34,
+      "kills": 3,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy (3).png": {
+      "hits": 35,
+      "kills": 5,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy (2) - Copy.png": {
+      "hits": 36,
+      "kills": 0,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy (2).png": {
+      "hits": 36,
+      "kills": 3,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy (3).png": {
+      "hits": 38,
+      "kills": 3,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy - Copy (2).png": {
+      "hits": 41,
+      "kills": 2,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy - Copy - Copy.png": {
+      "hits": 32,
+      "kills": 3,
+      "wins": 1
+    },
+    "brave - Copy - Copy - Copy - Copy - Copy.png": {
+      "hits": 40,
+      "kills": 1,
+      "wins": 0
+    },
+    "brave - Copy - Copy - Copy - Copy.png": {
+      "hits": 34,
+      "kills": 9,
+      "wins": 0
+    },
+    "bubble1 - Copy (2) - Copy.jpg": {
+      "hits": 37,
+      "kills": 2,
+      "wins": 0
+    }
+  }
 }

@@ -1152,8 +1152,10 @@ const ArenaPage: React.FC = () => {
           vyArr[i] = nvy;
         }
 
-        // sampled collisions (normal arena) - RESTORE health reduction for normal-normal collisions
-        if (arenaType === ARENA_TYPES.NORMAL && !startGrace && n > 1) {
+        // sampled collisions - normal-normal collisions
+        // In normal arena: deal damage and record hits
+        // In boss arena: bounce only (no damage), but still record hits for all normals
+        if (!startGrace && n > 1) {
           for (let i = 0; i < n; i++) {
             if (hArr[i] <= 0) continue;
             for (let s = 0; s < SAMPLES_PER_BUBBLE; s++) {
@@ -1178,29 +1180,50 @@ const ArenaPage: React.FC = () => {
                 vxArr[j] = bounced.bvx;
                 vyArr[j] = bounced.bvy;
 
-                // apply damage to both, but respect per-bubble cooldown so damage isn't applied every tick
-                const bonus = Math.round(Math.min(2, (rArr[i] + rArr[j]) / 60));
-                const damage = baseDamage + bonus;
+                // In normal arena: apply damage to both
+                // In boss arena: just record hits (no damage)
+                if (arenaType === ARENA_TYPES.NORMAL) {
+                  const bonus = Math.round(Math.min(2, (rArr[i] + rArr[j]) / 60));
+                  const damage = baseDamage + bonus;
 
-                if (nowMs - lastA > DAMAGE_COOLDOWN_MS) {
-                  hArr[i] = Math.max(0, hArr[i] - damage);
-                  damageCooldownRef.current[idArr[i]] = nowMs;
-                  try {
-                    const rawAttacker = imgSrcsRef.current[imgIdxArr[j]] ?? `player-${idArr[j]}`;
-                    const attacker = normalizePlayer(rawAttacker);
-                    lastDamagerRef.current[idArr[i]] = attacker;
-                    try { recordHit(attacker); } catch (e) {}
-                  } catch (e) {}
-                }
-                if (nowMs - lastB > DAMAGE_COOLDOWN_MS) {
-                  hArr[j] = Math.max(0, hArr[j] - damage);
-                  damageCooldownRef.current[idArr[j]] = nowMs;
-                  try {
-                    const rawAttacker = imgSrcsRef.current[imgIdxArr[i]] ?? `player-${idArr[i]}`;
-                    const attacker = normalizePlayer(rawAttacker);
-                    lastDamagerRef.current[idArr[j]] = attacker;
-                    try { recordHit(attacker); } catch (e) {}
-                  } catch (e) {}
+                  if (nowMs - lastA > DAMAGE_COOLDOWN_MS) {
+                    hArr[i] = Math.max(0, hArr[i] - damage);
+                    damageCooldownRef.current[idArr[i]] = nowMs;
+                    try {
+                      const rawAttacker = imgSrcsRef.current[imgIdxArr[j]] ?? `player-${idArr[j]}`;
+                      const attacker = normalizePlayer(rawAttacker);
+                      lastDamagerRef.current[idArr[i]] = attacker;
+                      try { recordHit(attacker); } catch (e) {}
+                    } catch (e) {}
+                  }
+                  if (nowMs - lastB > DAMAGE_COOLDOWN_MS) {
+                    hArr[j] = Math.max(0, hArr[j] - damage);
+                    damageCooldownRef.current[idArr[j]] = nowMs;
+                    try {
+                      const rawAttacker = imgSrcsRef.current[imgIdxArr[i]] ?? `player-${idArr[i]}`;
+                      const attacker = normalizePlayer(rawAttacker);
+                      lastDamagerRef.current[idArr[j]] = attacker;
+                      try { recordHit(attacker); } catch (e) {}
+                    } catch (e) {}
+                  }
+                } else {
+                  // boss arena: record hits for both without damage
+                  if (nowMs - lastA > DAMAGE_COOLDOWN_MS) {
+                    try {
+                      const rawAttacker = imgSrcsRef.current[imgIdxArr[j]] ?? `player-${idArr[j]}`;
+                      const attacker = normalizePlayer(rawAttacker);
+                      try { recordHit(attacker); } catch (e) {}
+                    } catch (e) {}
+                    damageCooldownRef.current[idArr[i]] = nowMs;
+                  }
+                  if (nowMs - lastB > DAMAGE_COOLDOWN_MS) {
+                    try {
+                      const rawAttacker = imgSrcsRef.current[imgIdxArr[i]] ?? `player-${idArr[i]}`;
+                      const attacker = normalizePlayer(rawAttacker);
+                      try { recordHit(attacker); } catch (e) {}
+                    } catch (e) {}
+                    damageCooldownRef.current[idArr[j]] = nowMs;
+                  }
                 }
 
                 // small outward push to reduce sticking
@@ -1434,7 +1457,8 @@ const ArenaPage: React.FC = () => {
                   sbCollisionCooldownRef.current[idArr[i]] = nowMs;
                   try {
                     const rawAttacker = superBubbleRef.current?.imgSrc ?? "superbubble";
-                    const attacker = normalizePlayer(rawAttacker);
+                    // prefix superbubble key with "superbubble-" to make it recognizable on server
+                    const attacker = "superbubble-" + normalizePlayer(rawAttacker);
                     lastDamagerRef.current[idArr[i]] = attacker;
                     try { recordHit(attacker); } catch (e) {}
                   } catch (e) {}
@@ -1474,8 +1498,18 @@ const ArenaPage: React.FC = () => {
             }
             setUiBubblesSnapshot(snapNormals);
             setProjectiles((p) => p);
-            setWinner(null);
-            setWinnersList(null);
+            // Team wins - record "team" as winner
+            setWinner({
+              x: 0,
+              y: 0,
+              radius: 0,
+              health: 100,
+              imgSrc: "team",
+              vx: 0,
+              vy: 0,
+              id: -1,
+            });
+            setWinnersList(snapNormals);
             const allBossImgs = (imageListRef.current || []).map((imgName) => `http://localhost:5000/bossimgs/${imgName}`);
             setWinnersImages(allBossImgs.length > 0 ? allBossImgs : null);
             superBubbleRef.current = null;
@@ -1495,12 +1529,13 @@ const ArenaPage: React.FC = () => {
               vy: superBubbleRef.current.vy,
               id: superBubbleRef.current.id,
             });
+            // Superbubble wins - record "superbubble" as winner
             setWinner({
               x: superBubbleRef.current.x,
               y: superBubbleRef.current.y,
               radius: superBubbleRef.current.radius,
               health: Math.round(superBubbleRef.current.health),
-              imgSrc: superBubbleRef.current.imgSrc,
+              imgSrc: "superbubble",
               vx: superBubbleRef.current.vx,
               vy: superBubbleRef.current.vy,
               id: superBubbleRef.current.id,
@@ -1742,12 +1777,22 @@ const ArenaPage: React.FC = () => {
     if (isRunning) return;
     // if there is a winner pending, don't clear here — winner effect will flush and clear
     if (winner) return;
-    try {
-      if (statsClient && typeof (statsClient as any).setGame === "function") {
-        (statsClient as any).setGame(null, null);
-      }
-    } catch (e) {}
-    currentGameRef.current = null;
+    (async () => {
+      try {
+        // Flush any remaining stats with game/arena context before clearing
+        if (statsClient && typeof (statsClient as any).flush === 'function') {
+          try { await (statsClient as any).flush(); } catch (e) {}
+        }
+        // Give flush time to complete before clearing context
+        await new Promise(r => setTimeout(r, 100));
+      } catch (e) {}
+      try {
+        if (statsClient && typeof (statsClient as any).setGame === "function") {
+          (statsClient as any).setGame(null, null);
+        }
+      } catch (e) {}
+      currentGameRef.current = null;
+    })();
   }, [isRunning, winner]);
 
   // When a winner is set, post the winner for the current game and clear the game id
@@ -1757,16 +1802,25 @@ const ArenaPage: React.FC = () => {
     if (!gid) return;
     (async () => {
       try {
-        const player = normalizePlayer(winner.imgSrc) || `player-${winner.id}`;
+        // Flush all pending stats with game/arena context FIRST
+        try { if (statsClient && typeof (statsClient as any).flush === 'function') await (statsClient as any).flush(); } catch (e) {}
+        // Wait a bit for flush to complete
+        await new Promise(r => setTimeout(r, 100));
+        
+        // Use imgSrc directly for team/superbubble, or normalize player name
+        let player = winner.imgSrc;
+        if (player !== "team" && player !== "superbubble") {
+          player = normalizePlayer(player) || `player-${winner.id}`;
+        }
         await fetch('http://localhost:5000/api/stats/winner', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ game: gid, player, arena: arenaType || ARENA_TYPES.NORMAL }),
         });
-        try { if (statsClient && typeof (statsClient as any).flush === 'function') await (statsClient as any).flush(); } catch (e) {}
       } catch (e) {
         console.warn('Failed to post winner', e);
       } finally {
+        // NOW clear the game context after all stats have been sent
         try { statsClient && typeof (statsClient as any).setGame === 'function' && (statsClient as any).setGame(null, null); } catch (e) {}
         currentGameRef.current = null;
       }

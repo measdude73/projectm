@@ -33,6 +33,10 @@
       <div style="display:flex;gap:8px;align-items:center;">
         <label for="gameSelect" class="small" style="color:#cbd5e1">View:</label>
         <select id="gameSelect"></select>
+        <select id="arenaSelect" style="margin-left:8px;padding:8px;border-radius:6px">
+          <option value="normal">Normal</option>
+          <option value="boss">Boss</option>
+        </select>
         <input id="search" placeholder="Search player..." style="min-width:220px;padding:8px;border-radius:6px;border:0;background:rgba(255,255,255,0.03);color:#fff" />
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
@@ -76,7 +80,8 @@
 
     async function fetchGames() {
       try {
-        const res = await fetch('/api/stats/games');
+        const arena = (arenaSelect.value || 'normal');
+        const res = await fetch('/api/stats/games?arena=' + encodeURIComponent(arena));
         const data = await res.json();
         gamesCache = data || [];
         // populate select, but preserve current selection if possible
@@ -111,13 +116,14 @@
 
     async function fetchStatsFor(selection) {
       try {
-        let url = '/api/stats';
-        if (selection && selection !== 'combined') url = `/api/stats?game=${encodeURIComponent(selection)}`;
+        const arena = (arenaSelect.value || 'normal');
+        let url = '/api/stats?arena=' + encodeURIComponent(arena);
+        if (selection && selection !== 'combined') url = `/api/stats?game=${encodeURIComponent(selection)}&arena=${encodeURIComponent(arena)}`;
         const res = await fetch(url);
         if (!res.ok) throw new Error('network');
         const data = await res.json();
         currentList = data || [];
-        renderRows(currentList);
+        renderRows(currentList, arena);
 
         // winner box: for game-specific, ask server for winner from games cache
         if (selection && selection !== 'combined') {
@@ -139,20 +145,32 @@
     }
 
     function renderRows(data) {
+      // default to normal if arena not provided
+      const arena = arguments.length > 1 ? arguments[1] : (arenaSelect && arenaSelect.value) || 'normal';
       const q = (searchInput.value || '').toLowerCase().trim();
       const filtered = data.filter(r => !q || (String(r.player||'').toLowerCase().includes(q)));
       if (!filtered || filtered.length === 0) {
         rowsEl.innerHTML = '<div class="row"><div class="muted" style="grid-column:1/-1;padding:12px">No data yet.</div></div>';
         return;
       }
-      rowsEl.innerHTML = filtered.map((r, i) => {
-        const raw = String(r.player || '');
-        const player = raw.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || raw;
-        const kills = r.kills || 0;
-        const hits = r.hits || 0;
-        const wins = r.wins || 0;
-        return `<div class="row"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="text-align:right">${kills}</div><div style="text-align:right">${hits}</div><div style="text-align:right">${wins}</div></div>`;
-      }).join('');
+      if (arena === 'boss') {
+        // boss mode: show hits-only
+        rowsEl.innerHTML = filtered.map((r, i) => {
+          const raw = String(r.player || '');
+          const player = raw.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || raw;
+          const hits = r.hits || 0;
+          return `<div class="row"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="grid-column:3/-1;text-align:right">Hits: ${hits}</div></div>`;
+        }).join('');
+      } else {
+        rowsEl.innerHTML = filtered.map((r, i) => {
+          const raw = String(r.player || '');
+          const player = raw.replace(/^https?:\/\/[^\/]+\//, '').replace(/^\/+/, '').split('/').pop() || raw;
+          const kills = r.kills || 0;
+          const hits = r.hits || 0;
+          const wins = r.wins || 0;
+          return `<div class="row"><div style="width:48px">${i+1}</div><div class="player" title="${r.player}">${player}</div><div style="text-align:right">${kills}</div><div style="text-align:right">${hits}</div><div style="text-align:right">${wins}</div></div>`;
+        }).join('');
+      }
     }
 
     refreshBtn.addEventListener('click', () => fetchStatsFor(gameSelect.value || 'combined'));
@@ -176,7 +194,8 @@
     resetBtn.addEventListener('click', async () => {
       if (!confirm('Reset leaderboard (clears all games and totals)?')) return;
       try {
-        const res = await fetch('/api/stats', { method: 'DELETE' });
+        const arena = (arenaSelect.value || 'normal');
+        const res = await fetch('/api/stats?arena=' + encodeURIComponent(arena), { method: 'DELETE' });
         if (!res.ok) throw new Error('Reset failed');
         await fetchGames();
         fetchStatsFor('combined');
@@ -188,6 +207,20 @@
     // export CSV removed per UI request
 
     // initial load: fetch games and stats once; further refreshes happen only on user action
+    arenaSelect.addEventListener('change', async () => {
+      const hdr = document.querySelector('.row.header');
+      const arena = (arenaSelect.value || 'normal');
+      if (hdr) {
+        if (arena === 'boss') {
+          hdr.innerHTML = '<div style="width:48px">#</div><div>Player</div><div style="grid-column:3/-1;text-align:right">Hits</div>';
+        } else {
+          hdr.innerHTML = '<div style="width:48px">#</div><div>Player</div><div style="text-align:right">Kills</div><div style="text-align:right">Hits</div><div style="text-align:right">Wins</div>';
+        }
+      }
+      await fetchGames();
+      fetchStatsFor(gameSelect.value || 'combined');
+    });
+
     (async () => {
       await fetchGames();
       // initial stats load: respect current selection (default combined)
