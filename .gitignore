@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.DS_Store
+*.log
+
+# Image storage directories (auto-generated)
+server/images/
+server/bossimgs/
+server/superbubbleimg/
+server/superimgstorage/
+
+# Stats files (auto-generated)
+server/stats.json
+server/stats_boss.json
